@@ -4,49 +4,135 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
+
+	"github.com/yahya-ns/ivy-wallet/backend/internal/config"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
 type DB struct {
 	*sql.DB
+	Driver string // "sqlite", "postgres", "mariadb"
 }
 
-func Connect(dbPath string) (*DB, error) {
-	db, err := sql.Open("sqlite", dbPath)
+func Connect(cfg config.DatabaseConfig) (*DB, error) {
+	var driverName string
+	switch cfg.Type {
+	case "postgres":
+		driverName = "postgres"
+	case "mariadb":
+		driverName = "mysql"
+	default:
+		driverName = "sqlite"
+	}
+
+	sqlDB, err := sql.Open(driverName, cfg.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
+		return nil, fmt.Errorf("failed to open database (%s): %w", cfg.Type, err)
 	}
 
-	// Recommended SQLite production PRAGMAs
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL;",
-		"PRAGMA busy_timeout=5000;",
-		"PRAGMA synchronous=NORMAL;",
-		"PRAGMA foreign_keys=ON;",
+	// Verify connection
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to connect to database (%s): %w", cfg.Type, err)
 	}
 
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			log.Printf("Warning: failed to execute pragma '%s': %v", p, err)
+	// Performance tuning based on database engine
+	if cfg.Type == "sqlite" {
+		pragmas := []string{
+			"PRAGMA journal_mode=WAL;",
+			"PRAGMA busy_timeout=5000;",
+			"PRAGMA synchronous=NORMAL;",
+			"PRAGMA foreign_keys=ON;",
 		}
+		for _, p := range pragmas {
+			if _, err := sqlDB.Exec(p); err != nil {
+				log.Printf("Warning: failed to execute pragma '%s': %v", p, err)
+			}
+		}
+	} else {
+		sqlDB.SetMaxOpenConns(25)
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	}
 
-	dbWrapper := &DB{db}
+	dbWrapper := &DB{
+		DB:     sqlDB,
+		Driver: cfg.Type,
+	}
+
 	if err := dbWrapper.migrate(); err != nil {
-		return nil, fmt.Errorf("migration failed: %w", err)
+		return nil, fmt.Errorf("migration failed for %s: %w", cfg.Type, err)
 	}
 
 	if err := dbWrapper.seed(); err != nil {
 		log.Printf("Warning: seed failed: %v", err)
 	}
 
+	log.Printf("Successfully connected and initialized database engine: [%s]", cfg.Type)
 	return dbWrapper, nil
 }
 
+// Rebind converts standard '?' placeholders to '$1, $2, ...' for PostgreSQL
+func (db *DB) Rebind(query string) string {
+	if db.Driver != "postgres" {
+		return query
+	}
+
+	var sb strings.Builder
+	paramIdx := 1
+	inQuote := false
+
+	for i := 0; i < len(query); i++ {
+		char := query[i]
+		if char == '\'' {
+			inQuote = !inQuote
+			sb.WriteByte(char)
+		} else if char == '?' && !inQuote {
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(paramIdx))
+			paramIdx++
+		} else {
+			sb.WriteByte(char)
+		}
+	}
+
+	return sb.String()
+}
+
+// Query wraps standard sql.DB.Query with automatic parameter rebinding
+func (db *DB) Query(query string, args ...any) (*sql.Rows, error) {
+	return db.DB.Query(db.Rebind(query), args...)
+}
+
+// QueryRow wraps standard sql.DB.QueryRow with automatic parameter rebinding
+func (db *DB) QueryRow(query string, args ...any) *sql.Row {
+	return db.DB.QueryRow(db.Rebind(query), args...)
+}
+
+// Exec wraps standard sql.DB.Exec with automatic parameter rebinding
+func (db *DB) Exec(query string, args ...any) (sql.Result, error) {
+	return db.DB.Exec(db.Rebind(query), args...)
+}
+
 func (db *DB) migrate() error {
+	switch db.Driver {
+	case "postgres":
+		return db.migratePostgres()
+	case "mariadb":
+		return db.migrateMariaDB()
+	default:
+		return db.migrateSQLite()
+	}
+}
+
+func (db *DB) migrateSQLite() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS settings (
 		id TEXT PRIMARY KEY,
@@ -87,7 +173,7 @@ func (db *DB) migrate() error {
 	CREATE TABLE IF NOT EXISTS transactions (
 		id TEXT PRIMARY KEY,
 		account_id TEXT NOT NULL,
-		type TEXT NOT NULL, -- EXPENSE, INCOME, TRANSFER
+		type TEXT NOT NULL,
 		amount REAL NOT NULL,
 		to_account_id TEXT,
 		to_amount REAL,
@@ -123,7 +209,7 @@ func (db *DB) migrate() error {
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
 		amount REAL NOT NULL,
-		type TEXT NOT NULL, -- BORROW, LEND
+		type TEXT NOT NULL,
 		color TEXT NOT NULL DEFAULT '#F53D3D',
 		icon TEXT NOT NULL DEFAULT 'hand-coins',
 		account_id TEXT,
@@ -177,8 +263,273 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
 	`
 
-	_, err := db.Exec(schema)
+	_, err := db.DB.Exec(schema)
 	return err
+}
+
+func (db *DB) migratePostgres() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS settings (
+		id VARCHAR(64) PRIMARY KEY,
+		theme VARCHAR(32) NOT NULL DEFAULT 'DARK',
+		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
+		buffer_amount DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+		name VARCHAR(255) NOT NULL DEFAULT 'My Ivy Wallet',
+		first_day_of_week INTEGER NOT NULL DEFAULT 1,
+		hide_balance INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS accounts (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
+		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
+		icon VARCHAR(64) NOT NULL DEFAULT 'wallet',
+		order_num INTEGER NOT NULL DEFAULT 0,
+		include_in_balance INTEGER NOT NULL DEFAULT 1,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS categories (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
+		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
+		order_num INTEGER NOT NULL DEFAULT 0,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS transactions (
+		id VARCHAR(64) PRIMARY KEY,
+		account_id VARCHAR(64) NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+		type VARCHAR(32) NOT NULL,
+		amount DOUBLE PRECISION NOT NULL,
+		to_account_id VARCHAR(64) REFERENCES accounts(id) ON DELETE SET NULL,
+		to_amount DOUBLE PRECISION,
+		title VARCHAR(255),
+		description TEXT,
+		date_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		category_id VARCHAR(64) REFERENCES categories(id) ON DELETE SET NULL,
+		due_date TIMESTAMP WITH TIME ZONE,
+		recurring_rule_id VARCHAR(64),
+		loan_id VARCHAR(64),
+		loan_record_id VARCHAR(64),
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS budgets (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		amount DOUBLE PRECISION NOT NULL,
+		category_ids TEXT,
+		account_ids TEXT,
+		period VARCHAR(32) NOT NULL DEFAULT 'MONTHLY',
+		order_id INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS loans (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		amount DOUBLE PRECISION NOT NULL,
+		type VARCHAR(32) NOT NULL,
+		color VARCHAR(32) NOT NULL DEFAULT '#F53D3D',
+		icon VARCHAR(64) NOT NULL DEFAULT 'hand-coins',
+		account_id VARCHAR(64) REFERENCES accounts(id) ON DELETE SET NULL,
+		note TEXT,
+		date_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		due_date TIMESTAMP WITH TIME ZONE,
+		is_paid INTEGER NOT NULL DEFAULT 0,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS loan_records (
+		id VARCHAR(64) PRIMARY KEY,
+		loan_id VARCHAR(64) NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+		amount DOUBLE PRECISION NOT NULL,
+		date_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		note TEXT,
+		account_id VARCHAR(64) REFERENCES accounts(id) ON DELETE SET NULL,
+		transaction_id VARCHAR(64) REFERENCES transactions(id) ON DELETE SET NULL,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS planned_payment_rules (
+		id VARCHAR(64) PRIMARY KEY,
+		start_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		interval_n INTEGER NOT NULL DEFAULT 1,
+		interval_type VARCHAR(32) NOT NULL DEFAULT 'MONTH',
+		one_time INTEGER NOT NULL DEFAULT 0,
+		type VARCHAR(32) NOT NULL DEFAULT 'EXPENSE',
+		account_id VARCHAR(64) NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+		amount DOUBLE PRECISION NOT NULL,
+		category_id VARCHAR(64) REFERENCES categories(id) ON DELETE SET NULL,
+		title VARCHAR(255),
+		description TEXT,
+		is_active INTEGER NOT NULL DEFAULT 1,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_pg_transactions_datetime ON transactions(date_time);
+	CREATE INDEX IF NOT EXISTS idx_pg_transactions_account ON transactions(account_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_transactions_category ON transactions(category_id);
+	`
+
+	_, err := db.DB.Exec(schema)
+	return err
+}
+
+func (db *DB) migrateMariaDB() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS settings (
+		id VARCHAR(64) PRIMARY KEY,
+		theme VARCHAR(32) NOT NULL DEFAULT 'DARK',
+		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
+		buffer_amount DOUBLE NOT NULL DEFAULT 0.0,
+		name VARCHAR(255) NOT NULL DEFAULT 'My Ivy Wallet',
+		first_day_of_week INT NOT NULL DEFAULT 1,
+		hide_balance INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS accounts (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
+		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
+		icon VARCHAR(64) NOT NULL DEFAULT 'wallet',
+		order_num INT NOT NULL DEFAULT 0,
+		include_in_balance INT NOT NULL DEFAULT 1,
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS categories (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
+		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
+		order_num INT NOT NULL DEFAULT 0,
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS transactions (
+		id VARCHAR(64) PRIMARY KEY,
+		account_id VARCHAR(64) NOT NULL,
+		type VARCHAR(32) NOT NULL,
+		amount DOUBLE NOT NULL,
+		to_account_id VARCHAR(64),
+		to_amount DOUBLE,
+		title VARCHAR(255),
+		description TEXT,
+		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		category_id VARCHAR(64),
+		due_date DATETIME,
+		recurring_rule_id VARCHAR(64),
+		loan_id VARCHAR(64),
+		loan_record_id VARCHAR(64),
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+		FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS budgets (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		amount DOUBLE NOT NULL,
+		category_ids TEXT,
+		account_ids TEXT,
+		period VARCHAR(32) NOT NULL DEFAULT 'MONTHLY',
+		order_id INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS loans (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		amount DOUBLE NOT NULL,
+		type VARCHAR(32) NOT NULL,
+		color VARCHAR(32) NOT NULL DEFAULT '#F53D3D',
+		icon VARCHAR(64) NOT NULL DEFAULT 'hand-coins',
+		account_id VARCHAR(64),
+		note TEXT,
+		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		due_date DATETIME,
+		is_paid INT NOT NULL DEFAULT 0,
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS loan_records (
+		id VARCHAR(64) PRIMARY KEY,
+		loan_id VARCHAR(64) NOT NULL,
+		amount DOUBLE NOT NULL,
+		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		note TEXT,
+		account_id VARCHAR(64),
+		transaction_id VARCHAR(64),
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE,
+		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+		FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS planned_payment_rules (
+		id VARCHAR(64) PRIMARY KEY,
+		start_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		interval_n INT NOT NULL DEFAULT 1,
+		interval_type VARCHAR(32) NOT NULL DEFAULT 'MONTH',
+		one_time INT NOT NULL DEFAULT 0,
+		type VARCHAR(32) NOT NULL DEFAULT 'EXPENSE',
+		account_id VARCHAR(64) NOT NULL,
+		amount DOUBLE NOT NULL,
+		category_id VARCHAR(64),
+		title VARCHAR(255),
+		description TEXT,
+		is_active INT NOT NULL DEFAULT 1,
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+	`
+
+	statements := strings.Split(schema, ";")
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt != "" {
+			if _, err := db.DB.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (db *DB) seed() error {
@@ -187,7 +538,7 @@ func (db *DB) seed() error {
 	err := db.QueryRow("SELECT COUNT(*) FROM settings").Scan(&count)
 	if err != nil || count == 0 {
 		_, _ = db.Exec(`
-			INSERT OR IGNORE INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance)
+			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance)
 			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0)
 		`, uuid.NewString())
 	}
@@ -257,7 +608,7 @@ func (db *DB) seed() error {
 		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Food & Dining'").Scan(&foodCatId)
 		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Groceries'").Scan(&grocCatId)
 
-		now := time.Now()
+		now := time.Now().UTC()
 		if bankId != "" && salaryCatId != "" {
 			_, _ = db.Exec(`
 				INSERT INTO transactions (id, account_id, type, amount, title, date_time, category_id)
@@ -289,4 +640,131 @@ func (db *DB) seed() error {
 	}
 
 	return nil
+}
+
+// Sync Upsert Helpers supporting SQLite, PostgreSQL, and MariaDB
+func (db *DB) UpsertAccount(a models.Account, now time.Time) error {
+	incInBal := 0
+	if a.IncludeInBalance {
+		incInBal = 1
+	}
+	isDel := 0
+	if a.IsDeleted {
+		isDel = 1
+	}
+
+	if db.Driver == "mariadb" {
+		_, err := db.Exec(`
+			INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				name = VALUES(name),
+				currency = VALUES(currency),
+				color = VALUES(color),
+				icon = VALUES(icon),
+				order_num = VALUES(order_num),
+				include_in_balance = VALUES(include_in_balance),
+				is_deleted = VALUES(is_deleted),
+				updated_at = VALUES(updated_at)
+		`, a.ID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
+		return err
+	}
+
+	// SQLite and PostgreSQL use ON CONFLICT(id)
+	_, err := db.Exec(`
+		INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			currency = excluded.currency,
+			color = excluded.color,
+			icon = excluded.icon,
+			order_num = excluded.order_num,
+			include_in_balance = excluded.include_in_balance,
+			is_deleted = excluded.is_deleted,
+			updated_at = excluded.updated_at
+	`, a.ID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
+	return err
+}
+
+func (db *DB) UpsertCategory(c models.Category, now time.Time) error {
+	isDel := 0
+	if c.IsDeleted {
+		isDel = 1
+	}
+
+	if db.Driver == "mariadb" {
+		_, err := db.Exec(`
+			INSERT INTO categories (id, name, color, icon, order_num, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				name = VALUES(name),
+				color = VALUES(color),
+				icon = VALUES(icon),
+				order_num = VALUES(order_num),
+				is_deleted = VALUES(is_deleted),
+				updated_at = VALUES(updated_at)
+		`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, isDel, c.CreatedAt, now)
+		return err
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO categories (id, name, color, icon, order_num, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			color = excluded.color,
+			icon = excluded.icon,
+			order_num = excluded.order_num,
+			is_deleted = excluded.is_deleted,
+			updated_at = excluded.updated_at
+	`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, isDel, c.CreatedAt, now)
+	return err
+}
+
+func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
+	isDel := 0
+	if t.IsDeleted {
+		isDel = 1
+	}
+
+	if db.Driver == "mariadb" {
+		_, err := db.Exec(`
+			INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				account_id = VALUES(account_id),
+				type = VALUES(type),
+				amount = VALUES(amount),
+				to_account_id = VALUES(to_account_id),
+				to_amount = VALUES(to_amount),
+				title = VALUES(title),
+				description = VALUES(description),
+				date_time = VALUES(date_time),
+				category_id = VALUES(category_id),
+				due_date = VALUES(due_date),
+				is_deleted = VALUES(is_deleted),
+				updated_at = VALUES(updated_at)
+		`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+		return err
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			account_id = excluded.account_id,
+			type = excluded.type,
+			amount = excluded.amount,
+			to_account_id = excluded.to_account_id,
+			to_amount = excluded.to_amount,
+			title = excluded.title,
+			description = excluded.description,
+			date_time = excluded.date_time,
+			category_id = excluded.category_id,
+			due_date = excluded.due_date,
+			is_deleted = excluded.is_deleted,
+			updated_at = excluded.updated_at
+	`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+	return err
 }

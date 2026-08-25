@@ -24,9 +24,9 @@ var embeddedFS embed.FS
 func main() {
 	cfg := config.Load()
 	log.Printf("Starting Ivy Wallet Web Edition...")
-	log.Printf("Database path: %s", cfg.DBPath)
+	log.Printf("Database engine: %s", cfg.DB.Type)
 
-	db, err := database.Connect(cfg.DBPath)
+	db, err := database.Connect(cfg.DB)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}

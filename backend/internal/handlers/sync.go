@@ -219,74 +219,17 @@ func (h *SyncHandler) PushSync(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Process Accounts
 	for _, a := range payload.Accounts {
-		incInBal := 0
-		if a.IncludeInBalance {
-			incInBal = 1
-		}
-		isDel := 0
-		if a.IsDeleted {
-			isDel = 1
-		}
-		_, _ = h.DB.Exec(`
-			INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				name = excluded.name,
-				currency = excluded.currency,
-				color = excluded.color,
-				icon = excluded.icon,
-				order_num = excluded.order_num,
-				include_in_balance = excluded.include_in_balance,
-				is_deleted = excluded.is_deleted,
-				updated_at = excluded.updated_at
-			WHERE excluded.updated_at >= accounts.updated_at
-		`, a.ID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
+		_ = h.DB.UpsertAccount(a, now)
 	}
 
 	// 2. Process Categories
 	for _, c := range payload.Categories {
-		isDel := 0
-		if c.IsDeleted {
-			isDel = 1
-		}
-		_, _ = h.DB.Exec(`
-			INSERT INTO categories (id, name, color, icon, order_num, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				name = excluded.name,
-				color = excluded.color,
-				icon = excluded.icon,
-				order_num = excluded.order_num,
-				is_deleted = excluded.is_deleted,
-				updated_at = excluded.updated_at
-			WHERE excluded.updated_at >= categories.updated_at
-		`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, isDel, c.CreatedAt, now)
+		_ = h.DB.UpsertCategory(c, now)
 	}
 
 	// 3. Process Transactions
 	for _, t := range payload.Transactions {
-		isDel := 0
-		if t.IsDeleted {
-			isDel = 1
-		}
-		_, _ = h.DB.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				account_id = excluded.account_id,
-				type = excluded.type,
-				amount = excluded.amount,
-				to_account_id = excluded.to_account_id,
-				to_amount = excluded.to_amount,
-				title = excluded.title,
-				description = excluded.description,
-				date_time = excluded.date_time,
-				category_id = excluded.category_id,
-				due_date = excluded.due_date,
-				is_deleted = excluded.is_deleted,
-				updated_at = excluded.updated_at
-			WHERE excluded.updated_at >= transactions.updated_at
-		`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+		_ = h.DB.UpsertTransaction(t, now)
 	}
 
 	// Return full pull sync since payload's lastSyncTime

@@ -1,4 +1,5 @@
 services:
+  # Ivy Wallet Web Application
   ivy-wallet:
     build:
       context: .
@@ -9,11 +10,48 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      # Database engine: sqlite (default), postgres, or mariadb
+      - DB_TYPE=sqlite
       - DATA_DIR=/data
       - DB_PATH=/data/ivy-wallet.db
+      
+      # --- For PostgreSQL (uncomment if using PostgreSQL) ---
+      # - DB_TYPE=postgres
+      # - DATABASE_URL=postgres://ivy:secret@postgres:5432/ivy_wallet?sslmode=disable
+      
+      # --- For MariaDB / MySQL (uncomment if using MariaDB) ---
+      # - DB_TYPE=mariadb
+      # - DATABASE_URL=ivy:secret@tcp(mariadb:3306)/ivy_wallet?parseTime=true&charset=utf8mb4
     volumes:
       - ivy-data:/data
+
+  # --- Optional PostgreSQL Service ---
+  # postgres:
+  #   image: postgres:17-alpine
+  #   container_name: ivy-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ivy
+  #     POSTGRES_PASSWORD: secret
+  #     POSTGRES_DB: ivy_wallet
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+
+  # --- Optional MariaDB Service ---
+  # mariadb:
+  #   image: mariadb:11-jammy
+  #   container_name: ivy-mariadb
+  #   restart: unless-stopped
+  #   environment:
+  #     MARIADB_USER: ivy
+  #     MARIADB_PASSWORD: secret
+  #     MARIADB_DATABASE: ivy_wallet
+  #     MARIADB_RANDOM_ROOT_PASSWORD: "1"
+  #   volumes:
+  #     - mariadb-data:/var/lib/mysql
 
 volumes:
   ivy-data:
     driver: local
+  # postgres-data:
+  # mariadb-data:
