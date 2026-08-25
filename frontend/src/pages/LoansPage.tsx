@@ -8,7 +8,7 @@ import { IvyModal } from "@/components/ui/IvyModal";
 import { Plus, CheckCircle2, HandCoins, ArrowDownLeft, ArrowUpRight, Trash2 } from "lucide-react";
 
 export const LoansPage: React.FC = () => {
-  const { currency, hideBalance } = useTheme();
+  const { currency, hideBalance, formatRelative } = useTheme();
 
   const [loans, setLoans] = useState<Loan[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -280,7 +280,7 @@ export const LoansPage: React.FC = () => {
                         )}
                       </div>
                       <span className="text-[11px] font-semibold text-[var(--text-muted)]">
-                        {isBorrow ? "Borrowed" : "Lent"} • {formatRelativeDate(loan.dateTime)}
+                        {isBorrow ? "Borrowed" : "Lent"} • {formatRelative(loan.dateTime)}
                       </span>
                     </div>
                   </div>

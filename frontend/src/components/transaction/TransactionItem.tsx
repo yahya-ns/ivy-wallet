@@ -16,7 +16,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { currency, hideBalance } = useTheme();
+  const { currency, hideBalance, formatTime } = useTheme();
   const isExpense = transaction.type === "EXPENSE";
   const isIncome = transaction.type === "INCOME";
   const isTransfer = transaction.type === "TRANSFER";
@@ -76,7 +76,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
             <span className="truncate">{transaction.account?.name || "Account"}</span>
             <span>•</span>
-            <span>{formatTimeOnly(transaction.dateTime)}</span>
+            <span>{formatTime(transaction.dateTime)}</span>
           </div>
         </div>
       </div>

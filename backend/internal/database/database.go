@@ -142,6 +142,8 @@ func (db *DB) migrateSQLite() error {
 		name TEXT NOT NULL DEFAULT 'My Ivy Wallet',
 		first_day_of_week INTEGER NOT NULL DEFAULT 1,
 		hide_balance INTEGER NOT NULL DEFAULT 0,
+		date_format TEXT NOT NULL DEFAULT 'YYYY-MM-DD',
+		time_format TEXT NOT NULL DEFAULT '24_HOUR',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -264,7 +266,14 @@ func (db *DB) migrateSQLite() error {
 	`
 
 	_, err := db.DB.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Safely add columns if upgrading existing database
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN date_format TEXT NOT NULL DEFAULT 'YYYY-MM-DD'")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN time_format TEXT NOT NULL DEFAULT '24_HOUR'")
+	return nil
 }
 
 func (db *DB) migratePostgres() error {
@@ -277,6 +286,8 @@ func (db *DB) migratePostgres() error {
 		name VARCHAR(255) NOT NULL DEFAULT 'My Ivy Wallet',
 		first_day_of_week INTEGER NOT NULL DEFAULT 1,
 		hide_balance INTEGER NOT NULL DEFAULT 0,
+		date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD',
+		time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR',
 		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -390,7 +401,14 @@ func (db *DB) migratePostgres() error {
 	`
 
 	_, err := db.DB.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Safely add columns if upgrading existing database
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD'")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR'")
+	return nil
 }
 
 func (db *DB) migrateMariaDB() error {
@@ -403,6 +421,8 @@ func (db *DB) migrateMariaDB() error {
 		name VARCHAR(255) NOT NULL DEFAULT 'My Ivy Wallet',
 		first_day_of_week INT NOT NULL DEFAULT 1,
 		hide_balance INT NOT NULL DEFAULT 0,
+		date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD',
+		time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -538,8 +558,8 @@ func (db *DB) seed() error {
 	err := db.QueryRow("SELECT COUNT(*) FROM settings").Scan(&count)
 	if err != nil || count == 0 {
 		_, _ = db.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance)
-			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0)
+			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format)
+			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, 'YYYY-MM-DD', '24_HOUR')
 		`, uuid.NewString())
 	}
 

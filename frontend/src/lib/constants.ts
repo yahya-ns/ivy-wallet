@@ -75,3 +75,20 @@ export const CURRENCY_LIST = [
   { code: "BRL", symbol: "R$", name: "Brazilian Real" },
   { code: "CNY", symbol: "¥", name: "Chinese Yuan" },
 ];
+
+export const DATE_FORMAT_OPTIONS = [
+  { code: "YYYY-MM-DD", label: "YYYY-MM-DD (ISO)", pattern: "yyyy-MM-dd", example: "2026-08-25" },
+  { code: "DD/MM/YYYY", label: "DD/MM/YYYY (ID/UK/EU)", pattern: "dd/MM/yyyy", example: "25/08/2026" },
+  { code: "MM/DD/YYYY", label: "MM/DD/YYYY (US)", pattern: "MM/dd/yyyy", example: "08/25/2026" },
+  { code: "DD-MM-YYYY", label: "DD-MM-YYYY", pattern: "dd-MM-yyyy", example: "25-08-2026" },
+  { code: "DD.MM.YYYY", label: "DD.MM.YYYY (DE/EU)", pattern: "dd.MM.yyyy", example: "25.08.2026" },
+  { code: "d MMM yyyy", label: "d MMM yyyy (e.g. 25 Aug 2026)", pattern: "d MMM yyyy", example: "25 Aug 2026" },
+  { code: "MMM d, yyyy", label: "MMM d, yyyy (e.g. Aug 25, 2026)", pattern: "MMM d, yyyy", example: "Aug 25, 2026" },
+  { code: "EEEE, d MMMM yyyy", label: "Full Date (Tuesday, 25 August 2026)", pattern: "EEEE, d MMMM yyyy", example: "Tuesday, 25 August 2026" },
+];
+
+export const TIME_FORMAT_OPTIONS = [
+  { code: "24_HOUR", label: "24-Hour (17:45)", pattern: "HH:mm", example: "17:45" },
+  { code: "12_HOUR", label: "12-Hour AM/PM (05:45 PM)", pattern: "hh:mm a", example: "05:45 PM" },
+];
+

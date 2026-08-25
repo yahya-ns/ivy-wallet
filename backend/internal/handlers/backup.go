@@ -129,9 +129,20 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 	// 5. Settings
 	var s models.Settings
 	var hideBal int
-	_ = h.DB.QueryRow("SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, created_at, updated_at FROM settings LIMIT 1").
-		Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &s.CreatedAt, &s.UpdatedAt)
+	var dateFormat, timeFormat sql.NullString
+	_ = h.DB.QueryRow("SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at FROM settings LIMIT 1").
+		Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
 	s.HideBalance = hideBal == 1
+	if dateFormat.Valid && dateFormat.String != "" {
+		s.DateFormat = dateFormat.String
+	} else {
+		s.DateFormat = "YYYY-MM-DD"
+	}
+	if timeFormat.Valid && timeFormat.String != "" {
+		s.TimeFormat = timeFormat.String
+	} else {
+		s.TimeFormat = "24_HOUR"
+	}
 
 	backup := map[string]interface{}{
 		"version":      "1.0",

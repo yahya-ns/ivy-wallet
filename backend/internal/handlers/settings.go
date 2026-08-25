@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -17,19 +18,20 @@ type SettingsHandler struct {
 func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var s models.Settings
 	var hideBal int
+	var dateFormat, timeFormat sql.NullString
 
 	err := h.DB.QueryRow(`
-		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, created_at, updated_at
+		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at
 		FROM settings LIMIT 1
-	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &s.CreatedAt, &s.UpdatedAt)
+	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
 
 	if err != nil {
 		// Initialize if missing
 		id := uuid.NewString()
 		now := time.Now().UTC()
 		_, _ = h.DB.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, created_at, updated_at)
-			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, ?, ?)
+			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
+			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, 'YYYY-MM-DD', '24_HOUR', ?, ?)
 		`, id, now, now)
 
 		s = models.Settings{
@@ -40,11 +42,23 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			Name:           "My Ivy Wallet",
 			FirstDayOfWeek: 1,
 			HideBalance:    false,
+			DateFormat:     "YYYY-MM-DD",
+			TimeFormat:     "24_HOUR",
 			CreatedAt:      now,
 			UpdatedAt:      now,
 		}
 	} else {
 		s.HideBalance = hideBal == 1
+		if dateFormat.Valid && dateFormat.String != "" {
+			s.DateFormat = dateFormat.String
+		} else {
+			s.DateFormat = "YYYY-MM-DD"
+		}
+		if timeFormat.Valid && timeFormat.String != "" {
+			s.TimeFormat = timeFormat.String
+		} else {
+			s.TimeFormat = "24_HOUR"
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -59,6 +73,8 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Name           *string  `json:"name"`
 		FirstDayOfWeek *int     `json:"firstDayOfWeek"`
 		HideBalance    *bool    `json:"hideBalance"`
+		DateFormat     *string  `json:"dateFormat"`
+		TimeFormat     *string  `json:"timeFormat"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -68,11 +84,12 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var s models.Settings
 	var hideBal int
+	var dateFormat, timeFormat sql.NullString
 
 	err := h.DB.QueryRow(`
-		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance
+		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format
 		FROM settings LIMIT 1
-	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal)
+	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat)
 
 	now := time.Now().UTC()
 
@@ -83,12 +100,25 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		s.BufferAmount = 0.0
 		s.Name = "My Ivy Wallet"
 		s.FirstDayOfWeek = 1
+		s.DateFormat = "YYYY-MM-DD"
+		s.TimeFormat = "24_HOUR"
 		hideBal = 0
 
 		_, _ = h.DB.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, s.ID, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, now, now)
+			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, s.ID, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, now)
+	} else {
+		if dateFormat.Valid && dateFormat.String != "" {
+			s.DateFormat = dateFormat.String
+		} else {
+			s.DateFormat = "YYYY-MM-DD"
+		}
+		if timeFormat.Valid && timeFormat.String != "" {
+			s.TimeFormat = timeFormat.String
+		} else {
+			s.TimeFormat = "24_HOUR"
+		}
 	}
 
 	if input.Theme != nil {
@@ -113,12 +143,18 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 			hideBal = 0
 		}
 	}
+	if input.DateFormat != nil {
+		s.DateFormat = *input.DateFormat
+	}
+	if input.TimeFormat != nil {
+		s.TimeFormat = *input.TimeFormat
+	}
 
 	_, err = h.DB.Exec(`
 		UPDATE settings
-		SET theme = ?, currency = ?, buffer_amount = ?, name = ?, first_day_of_week = ?, hide_balance = ?, updated_at = ?
+		SET theme = ?, currency = ?, buffer_amount = ?, name = ?, first_day_of_week = ?, hide_balance = ?, date_format = ?, time_format = ?, updated_at = ?
 		WHERE id = ?
-	`, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, now, s.ID)
+	`, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, s.ID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -131,3 +167,4 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(s)
 }
+

@@ -131,6 +131,8 @@ type Settings struct {
 	Name           string    `json:"name"`
 	FirstDayOfWeek int       `json:"firstDayOfWeek"`
 	HideBalance    bool      `json:"hideBalance"`
+	DateFormat     string    `json:"dateFormat"` // YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, etc.
+	TimeFormat     string    `json:"timeFormat"` // 12_HOUR, 24_HOUR
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }

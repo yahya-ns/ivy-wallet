@@ -9,7 +9,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { Search, Plus } from "lucide-react";
 
 export const TransactionsPage: React.FC = () => {
-  const { currency, hideBalance } = useTheme();
+  const { currency, hideBalance, formatRelative } = useTheme();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -82,7 +82,7 @@ export const TransactionsPage: React.FC = () => {
   let totalExpense = 0;
 
   transactions.forEach((tx) => {
-    const dateKey = formatRelativeDate(tx.dateTime);
+    const dateKey = formatRelative(tx.dateTime);
     if (!groupedTransactions[dateKey]) {
       groupedTransactions[dateKey] = [];
     }

@@ -122,6 +122,18 @@ export interface PlannedPaymentRule {
   category?: Category;
 }
 
+export type DateFormatOption =
+  | "YYYY-MM-DD"
+  | "DD/MM/YYYY"
+  | "MM/DD/YYYY"
+  | "DD-MM-YYYY"
+  | "DD.MM.YYYY"
+  | "d MMM yyyy"
+  | "MMM d, yyyy"
+  | "EEEE, d MMMM yyyy";
+
+export type TimeFormatOption = "12_HOUR" | "24_HOUR";
+
 export interface Settings {
   id: string;
   theme: ThemeMode;
@@ -130,6 +142,9 @@ export interface Settings {
   name: string;
   firstDayOfWeek: number;
   hideBalance: boolean;
+  dateFormat?: string;
+  timeFormat?: string;
   createdAt: string;
   updatedAt: string;
 }
+

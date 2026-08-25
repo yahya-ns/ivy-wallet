@@ -8,7 +8,7 @@ import { IvyModal } from "@/components/ui/IvyModal";
 import { Plus, CalendarClock, Trash2, Power } from "lucide-react";
 
 export const PlannedPage: React.FC = () => {
-  const { currency, hideBalance } = useTheme();
+  const { currency, hideBalance, formatRelative } = useTheme();
 
   const [rules, setRules] = useState<PlannedPaymentRule[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -197,7 +197,7 @@ export const PlannedPage: React.FC = () => {
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         Every {rule.intervalN > 1 ? `${rule.intervalN} ` : ""}
                         {rule.intervalType.toLowerCase()}
-                        {rule.intervalN > 1 ? "s" : ""} • Started {formatRelativeDate(rule.startDate)}
+                        {rule.intervalN > 1 ? "s" : ""} • Started {formatRelative(rule.startDate)}
                       </p>
                     </div>
                   </div>
