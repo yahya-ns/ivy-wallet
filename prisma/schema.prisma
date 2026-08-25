@@ -1,0 +1,175 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Account {
+  id               String        @id @default(uuid())
+  name             String
+  currency         String?       @default("USD")
+  color            String        @default("#5C3DF5")
+  icon             String?       @default("wallet")
+  orderNum         Float         @default(0.0)
+  includeInBalance Boolean       @default(true)
+  isDeleted        Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  transactions     Transaction[] @relation("AccountTransactions")
+  toTransactions   Transaction[] @relation("TransferToTransactions")
+  loans            Loan[]
+  loanRecords      LoanRecord[]
+  plannedPayments  PlannedPaymentRule[]
+
+  @@map("accounts")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#12B880")
+  icon      String?  @default("tag")
+  orderNum  Float    @default(0.0)
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions    Transaction[]
+  plannedPayments PlannedPaymentRule[]
+
+  @@map("categories")
+}
+
+model Transaction {
+  id              String    @id @default(uuid())
+  accountId       String
+  type            String    // EXPENSE, INCOME, TRANSFER
+  amount          Float
+  toAccountId     String?
+  toAmount        Float?
+  title           String?
+  description     String?
+  dateTime        DateTime  @default(now())
+  categoryId      String?
+  dueDate         DateTime?
+  recurringRuleId String?
+  loanId          String?
+  loanRecordId    String?
+  isDeleted       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  account         Account   @relation("AccountTransactions", fields: [accountId], references: [id], onDelete: Cascade)
+  toAccount       Account?  @relation("TransferToTransactions", fields: [toAccountId], references: [id], onDelete: SetNull)
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  loan            Loan?     @relation(fields: [loanId], references: [id], onDelete: SetNull)
+
+  @@map("transactions")
+}
+
+model Budget {
+  id           String   @id @default(uuid())
+  name         String
+  amount       Float
+  categoryIds  String?  // JSON array string or comma-separated UUIDs
+  accountIds   String?  // JSON array string or comma-separated UUIDs
+  orderId      Float    @default(0.0)
+  period       String   @default("MONTHLY") // MONTHLY, WEEKLY, ONE_TIME
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("budgets")
+}
+
+model Loan {
+  id          String       @id @default(uuid())
+  name        String
+  amount      Float
+  type        String       // BORROW (I owe), LEND (Owed to me)
+  color       String       @default("#3193F5")
+  icon        String?      @default("hand-coins")
+  orderNum    Float        @default(0.0)
+  accountId   String?
+  note        String?
+  dateTime    DateTime     @default(now())
+  dueDate     DateTime?
+  isPaid      Boolean      @default(false)
+  isDeleted   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  account     Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  records     LoanRecord[]
+  transactions Transaction[]
+
+  @@map("loans")
+}
+
+model LoanRecord {
+  id            String   @id @default(uuid())
+  loanId        String
+  amount        Float
+  dateTime      DateTime @default(now())
+  note          String?
+  accountId     String?
+  transactionId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  loan          Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  account       Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@map("loan_records")
+}
+
+model PlannedPaymentRule {
+  id           String    @id @default(uuid())
+  startDate    DateTime  @default(now())
+  intervalN    Int?      @default(1)
+  intervalType String?   @default("MONTH") // DAY, WEEK, MONTH, YEAR
+  oneTime      Boolean   @default(false)
+  type         String    @default("EXPENSE") // EXPENSE, INCOME, TRANSFER
+  accountId    String
+  amount       Float     @default(0.0)
+  categoryId   String?
+  title        String?
+  description  String?
+  isActive     Boolean   @default(true)
+  isDeleted    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("planned_payment_rules")
+}
+
+model Settings {
+  id             String   @id @default(uuid())
+  theme          String   @default("DARK") // LIGHT, DARK, TRUE_BLACK
+  currency       String   @default("USD")
+  bufferAmount   Float    @default(0.0)
+  name           String   @default("My Wallet")
+  firstDayOfWeek Int      @default(1) // 0: Sun, 1: Mon
+  hideBalance    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  baseCurrency String
+  currency     String
+  rate         Float
+  updatedAt    DateTime @updatedAt
+
+  @@unique([baseCurrency, currency])
+  @@map("exchange_rates")
+}

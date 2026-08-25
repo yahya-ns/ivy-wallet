@@ -98,8 +98,18 @@ lint/outputs/
 lint/tmp/
 lint/reports/
 
-# JS
-node_modules/*
+# JS / Node / Next.js
+node_modules/
+.next/
+out/
+.env*.local
+.env
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+/data/
+
 /ci-actions/compose-stability/ivy-compose-stability-report.txt
 
 # Kotlin Compiler
@@ -107,3 +117,4 @@ node_modules/*
 /.idea/AndroidProjectSystem.xml
 /.idea/runConfigurations.xml
 .idea
+
