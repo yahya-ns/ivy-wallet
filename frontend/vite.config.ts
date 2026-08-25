@@ -13,6 +13,18 @@ export default defineConfig({
   build: {
     outDir: '../backend/cmd/server/dist',
     emptyOutDir: true,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'wouter'],
+          'vendor-charts': ['recharts'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-utils': ['clsx', 'tailwind-merge', 'date-fns'],
+        },
+      },
+    },
   },
   server: {
     port: 5173,

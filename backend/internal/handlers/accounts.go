@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"math"
 	"net/http"
 	"time"
 
@@ -169,12 +170,13 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input struct {
-		Name             *string `json:"name"`
-		Currency         *string `json:"currency"`
-		Color            *string `json:"color"`
-		Icon             *string `json:"icon"`
-		OrderNum         *int    `json:"orderNum"`
-		IncludeInBalance *bool   `json:"includeInBalance"`
+		Name             *string  `json:"name"`
+		Currency         *string  `json:"currency"`
+		Color            *string  `json:"color"`
+		Icon             *string  `json:"icon"`
+		OrderNum         *int     `json:"orderNum"`
+		IncludeInBalance *bool    `json:"includeInBalance"`
+		Balance          *float64 `json:"balance"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -228,6 +230,61 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// If balance is provided, calculate current balance and create an adjustment transaction if there's a difference
+	if input.Balance != nil {
+		var currentBalance float64
+		// 1. Transactions directly from this account
+		txRows, err := h.DB.Query(`
+			SELECT type, amount FROM transactions WHERE account_id = ? AND is_deleted = 0
+		`, id)
+		if err == nil {
+			for txRows.Next() {
+				var txType string
+				var amount float64
+				_ = txRows.Scan(&txType, &amount)
+				if txType == "INCOME" {
+					currentBalance += amount
+				} else if txType == "EXPENSE" || txType == "TRANSFER" {
+					currentBalance -= amount
+				}
+			}
+			txRows.Close()
+		}
+
+		// 2. Incoming transfers to this account
+		toRows, err := h.DB.Query(`
+			SELECT amount, to_amount FROM transactions WHERE to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
+		`, id)
+		if err == nil {
+			for toRows.Next() {
+				var amount float64
+				var toAmount sql.NullFloat64
+				_ = toRows.Scan(&amount, &toAmount)
+				if toAmount.Valid {
+					currentBalance += toAmount.Float64
+				} else {
+					currentBalance += amount
+				}
+			}
+			toRows.Close()
+		}
+
+		diff := *input.Balance - currentBalance
+		if math.Abs(diff) >= 0.005 {
+			txType := "INCOME"
+			amt := diff
+			if diff < 0 {
+				txType = "EXPENSE"
+				amt = -diff
+			}
+
+			_, _ = h.DB.Exec(`
+				INSERT INTO transactions (id, account_id, type, amount, title, date_time, created_at, updated_at)
+				VALUES (?, ?, ?, ?, 'Balance Adjustment', ?, ?, ?)
+			`, uuid.NewString(), id, txType, amt, now, now, now)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

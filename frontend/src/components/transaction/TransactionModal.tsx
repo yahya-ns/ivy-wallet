@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { IvyModal } from "@/components/ui/IvyModal";
 import { IvyButton } from "@/components/ui/IvyButton";
-import { IvyIcon } from "@/components/ui/IvyIcon";
+import { AmountInput } from "@/components/ui/AmountInput";
+import { numberToAmountInput, parseAmountInput } from "@/lib/amountUtils";
 import { Account, Category, Transaction, TransactionType } from "@/lib/types";
 
 interface TransactionModalProps {
@@ -38,7 +39,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   useEffect(() => {
     if (initialTransaction) {
       setType(initialTransaction.type);
-      setAmount(initialTransaction.amount.toString());
+      setAmount(numberToAmountInput(initialTransaction.amount));
       setTitle(initialTransaction.title || "");
       setDescription(initialTransaction.description || "");
       setAccountId(initialTransaction.accountId);
@@ -60,7 +61,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
+    const parsedAmount = parseAmountInput(amount);
+    if (!amount || parsedAmount <= 0) {
       setError("Please enter a valid positive amount");
       return;
     }
@@ -79,7 +81,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     try {
       const payload = {
         type,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         title: title.trim() || null,
         description: description.trim() || null,
         accountId,
@@ -103,6 +105,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
 
       onSuccess();
+      window.dispatchEvent(new CustomEvent("ivy-data-updated"));
       onClose();
     } catch (err: any) {
       setError(err.message || "An error occurred");
@@ -152,18 +155,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
             Amount
           </label>
-          <div className="relative">
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-2xl px-4 py-3 text-2xl font-black text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple transition-colors"
-              autoFocus
-              required
-            />
-          </div>
+          <AmountInput
+            value={amount}
+            onChange={(formatted) => setAmount(formatted)}
+            placeholder="0"
+            autoFocus
+            required
+          />
         </div>
 
         {/* Account Selector (or From/To for transfer) */}

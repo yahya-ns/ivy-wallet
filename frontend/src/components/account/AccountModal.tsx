@@ -2,7 +2,11 @@ import React, { useState, useEffect } from "react";
 import { IvyModal } from "@/components/ui/IvyModal";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyIcon } from "@/components/ui/IvyIcon";
+import { AmountInput } from "@/components/ui/AmountInput";
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { COLOR_OPTIONS, ICON_OPTIONS, CURRENCY_LIST } from "@/lib/constants";
+import { formatMoney } from "@/lib/utils";
+import { numberToAmountInput, parseAmountInput } from "@/lib/amountUtils";
 import { Account } from "@/lib/types";
 
 interface AccountModalProps {
@@ -18,33 +22,39 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   onSuccess,
   initialAccount = null,
 }) => {
+  const { currency: defaultCurrency } = useTheme();
+
   const [name, setName] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(defaultCurrency || "USD");
   const [color, setColor] = useState("#5C3DF5");
   const [icon, setIcon] = useState("wallet");
   const [includeInBalance, setIncludeInBalance] = useState(true);
-  const [initialBalance, setInitialBalance] = useState("");
+  const [balanceStr, setBalanceStr] = useState("");
+  const [balanceValue, setBalanceValue] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialAccount) {
       setName(initialAccount.name);
-      setCurrency(initialAccount.currency || "USD");
+      setCurrency(initialAccount.currency || defaultCurrency || "USD");
       setColor(initialAccount.color || "#5C3DF5");
       setIcon(initialAccount.icon || "wallet");
       setIncludeInBalance(initialAccount.includeInBalance ?? true);
-      setInitialBalance("");
+      const currentBal = initialAccount.balance ?? 0;
+      setBalanceStr(numberToAmountInput(currentBal));
+      setBalanceValue(currentBal);
     } else {
       setName("");
-      setCurrency("USD");
+      setCurrency(defaultCurrency || "USD");
       setColor("#5C3DF5");
       setIcon("wallet");
       setIncludeInBalance(true);
-      setInitialBalance("");
+      setBalanceStr("");
+      setBalanceValue(0);
     }
     setError(null);
-  }, [initialAccount, isOpen]);
+  }, [initialAccount, isOpen, defaultCurrency]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +75,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         includeInBalance,
       };
 
-      if (!initialAccount && initialBalance && parseFloat(initialBalance) !== 0) {
-        payload.initialBalance = parseFloat(initialBalance);
+      if (initialAccount) {
+        payload.balance = parseAmountInput(balanceStr);
+      } else {
+        const initBal = parseAmountInput(balanceStr);
+        if (initBal !== 0) {
+          payload.initialBalance = initBal;
+        }
       }
 
       const url = initialAccount ? `/api/accounts/${initialAccount.id}` : "/api/accounts";
@@ -84,6 +99,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       }
 
       onSuccess();
+      window.dispatchEvent(new CustomEvent("ivy-data-updated"));
       onClose();
     } catch (err: any) {
       setError(err.message || "An error occurred");
@@ -91,6 +107,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setSaving(false);
     }
   };
+
+  const initialBalNum = initialAccount?.balance ?? 0;
+  const balanceDifference = balanceValue - initialBalNum;
+  const hasBalanceChanged = initialAccount && Math.abs(balanceDifference) >= 0.005;
 
   return (
     <IvyModal
@@ -140,22 +160,42 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           </div>
         </div>
 
-        {/* Initial Balance (only for new accounts) */}
-        {!initialAccount && (
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Initial Starting Balance (Optional)
+        {/* Balance Input (Initial for New, Current/Adjust for Edit) */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+              {initialAccount ? "Account Balance" : "Initial Starting Balance (Optional)"}
             </label>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={initialBalance}
-              onChange={(e) => setInitialBalance(e.target.value)}
-              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-            />
+            {initialAccount && (
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Perubahan saldo otomatis dicatat sebagai transaksi baru
+              </span>
+            )}
           </div>
-        )}
+          <AmountInput
+            value={balanceStr}
+            onChange={(formatted, num) => {
+              setBalanceStr(formatted);
+              setBalanceValue(num);
+            }}
+            placeholder="0"
+            allowNegative={true}
+          />
+          {hasBalanceChanged && (
+            <div className="mt-2 p-2.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-between text-xs">
+              <span className="text-[var(--text-muted)]">Penyesuaian Saldo:</span>
+              {balanceDifference > 0 ? (
+                <span className="text-ivy-green font-bold">
+                  +{formatMoney(balanceDifference, currency)} (Income)
+                </span>
+              ) : (
+                <span className="text-ivy-red font-bold">
+                  -{formatMoney(Math.abs(balanceDifference), currency)} (Expense)
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Color Palette Picker */}
         <div>
