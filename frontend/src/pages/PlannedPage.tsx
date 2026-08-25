@@ -5,6 +5,9 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyModal } from "@/components/ui/IvyModal";
+import { AccountSelect } from "@/components/ui/AccountSelect";
+import { CategorySelect } from "@/components/ui/CategorySelect";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { Plus, CalendarClock, Trash2, Power } from "lucide-react";
 
 export const PlannedPage: React.FC = () => {
@@ -310,7 +313,7 @@ export const PlannedPage: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Amount
@@ -325,26 +328,19 @@ export const PlannedPage: React.FC = () => {
                 required
               />
             </div>
-
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Account
               </label>
-              <select
+              <AccountSelect
                 value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.currency})
-                  </option>
-                ))}
-              </select>
+                onChange={setAccountId}
+                accounts={accounts}
+              />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Repeat Every
@@ -374,31 +370,21 @@ export const PlannedPage: React.FC = () => {
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Category
               </label>
-              <select
+              <CategorySelect
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategoryId}
+                categories={categories}
+              />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-            />
-          </div>
+          {/* Start Date */}
+          <DateTimePicker
+            label="Start Date"
+            value={startDate}
+            onChange={setStartDate}
+            mode="date"
+          />
 
           <div className="pt-2">
             <IvyButton type="submit" disabled={saving} className="w-full py-3">

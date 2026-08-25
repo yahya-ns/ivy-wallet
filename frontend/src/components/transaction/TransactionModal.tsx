@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { IvyModal } from "@/components/ui/IvyModal";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { AmountInput } from "@/components/ui/AmountInput";
+import { AccountSelect } from "@/components/ui/AccountSelect";
+import { CategorySelect } from "@/components/ui/CategorySelect";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { numberToAmountInput, parseAmountInput } from "@/lib/amountUtils";
 import { Account, Category, Transaction, TransactionType } from "@/lib/types";
 
@@ -47,7 +50,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAccountId(initialTransaction.accountId);
       setToAccountId(initialTransaction.toAccountId || "");
       setCategoryId(initialTransaction.categoryId || "");
-      setDateTime(new Date(initialTransaction.dateTime).toISOString().slice(0, 16));
+      setDateTime(initialTransaction.dateTime || new Date().toISOString());
     } else {
       setType(initialType);
       setAmount("");
@@ -56,7 +59,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAccountId(initialAccountId || accounts[0]?.id || "");
       setToAccountId(accounts.find(a => a.id !== (initialAccountId || accounts[0]?.id))?.id || accounts[1]?.id || accounts[0]?.id || "");
       setCategoryId(categories[0]?.id || "");
-      setDateTime(new Date().toISOString().slice(0, 16));
+      setDateTime(new Date().toISOString());
     }
     setError(null);
   }, [initialTransaction, initialType, initialAccountId, accounts, categories, isOpen]);
@@ -168,74 +171,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
         {/* Account Selector (or From/To for transfer) */}
         {type === "TRANSFER" ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 From Account
               </label>
-              <select
+              <AccountSelect
                 value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.currency})
-                  </option>
-                ))}
-              </select>
+                onChange={setAccountId}
+                accounts={accounts}
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 To Account
               </label>
-              <select
+              <AccountSelect
                 value={toAccountId}
-                onChange={(e) => setToAccountId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.currency})
-                  </option>
-                ))}
-              </select>
+                onChange={setToAccountId}
+                accounts={accounts}
+              />
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Account
               </label>
-              <select
+              <AccountSelect
                 value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.currency})
-                  </option>
-                ))}
-              </select>
+                onChange={setAccountId}
+                accounts={accounts}
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
                 Category
               </label>
-              <select
+              <CategorySelect
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategoryId}
+                categories={categories}
+              />
             </div>
           </div>
         )}
@@ -260,17 +239,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         {/* Date Time */}
-        <div>
-          <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-            Date & Time
-          </label>
-          <input
-            type="datetime-local"
-            value={dateTime}
-            onChange={(e) => setDateTime(e.target.value)}
-            className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-          />
-        </div>
+        <DateTimePicker
+          label="Date & Time"
+          value={dateTime}
+          onChange={setDateTime}
+          mode="datetime"
+        />
 
         {/* Submit */}
         <div className="pt-2">
