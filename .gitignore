@@ -98,8 +98,10 @@ lint/outputs/
 lint/tmp/
 lint/reports/
 
-# JS / Node / Next.js
+# JS / Node / Frontend
 node_modules/
+frontend/node_modules/
+frontend/dist/
 .next/
 out/
 .env*.local
@@ -109,11 +111,20 @@ out/
 *.sqlite
 *.sqlite3
 /data/
+backend/data/
+data/
+
+# Go binaries
+backend/server
+backend/ivy-wallet
+ivy-wallet
+backend/cmd/server/dist/assets/
 
 /ci-actions/compose-stability/ivy-compose-stability-report.txt
 
 # Android legacy mobile code (branch web-app)
 android-legacy/
 /android-legacy/
+
 
 

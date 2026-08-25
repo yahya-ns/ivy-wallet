@@ -1,61 +1,59 @@
-# Multi-stage Dockerfile for Ivy Wallet Web
+# ==============================================================================
+# Ivy Wallet - Ultra-lightweight Single Binary Container (Go + Vite SPA)
+# ==============================================================================
 
-# 1. Dependencies Stage
-FROM node:22-alpine AS deps
-RUN apk add --no-cache libc6-compat openssl
-WORKDIR /app
+# Stage 1: Build Frontend SPA
+FROM node:22-alpine AS frontend-builder
+WORKDIR /app/frontend
 
-COPY package*.json ./
-COPY prisma ./prisma/
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci || npm install
 
-RUN npm ci
-
-# 2. Build Stage
-FROM node:22-alpine AS builder
-RUN apk add --no-cache libc6-compat openssl
-WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
-ENV DATABASE_URL="file:/app/data/ivy-wallet.db"
-
-RUN npx prisma generate
+COPY frontend/ ./
 RUN npm run build
 
-# 3. Production Runner Stage
-FROM node:22-alpine AS runner
-RUN apk add --no-cache libc6-compat openssl
+# Stage 2: Build Go Single Binary
+FROM golang:1.24-alpine AS backend-builder
+WORKDIR /app/backend
+
+# Install CA certificates and build tools if needed
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY backend/go.mod backend/go.sum* ./
+RUN go mod download
+
+# Copy backend source
+COPY backend/ ./
+
+# Copy built frontend assets into Go embed path
+COPY --from=frontend-builder /app/backend/cmd/server/dist ./cmd/server/dist
+
+# Compile static binary with optimizations
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/ivy-wallet ./cmd/server
+
+# Stage 3: Minimal Production Image (~15MB)
+FROM alpine:3.21
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URL="file:/app/data/ivy-wallet.db"
+RUN apk add --no-cache ca-certificates tzdata sqlite-libs
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Create unprivileged user
+RUN addgroup -S ivy && adduser -S ivy -G ivy
 
-# Create persistent data volume directory
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+# Create persistent data directory
+RUN mkdir -p /data && chown -R ivy:ivy /data /app
 
-# Copy built standalone server and static assets
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
+# Copy binary from builder
+COPY --from=backend-builder /app/ivy-wallet /app/ivy-wallet
 
-USER nextjs
+USER ivy
+
+ENV PORT=3000 \
+    DATA_DIR=/data \
+    DB_PATH=/data/ivy-wallet.db
 
 EXPOSE 3000
 
-VOLUME ["/app/data"]
+VOLUME ["/data"]
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/app/ivy-wallet"]

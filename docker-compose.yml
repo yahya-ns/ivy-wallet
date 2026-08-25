@@ -1,22 +1,19 @@
-version: "3.8"
-
 services:
   ivy-wallet:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ivy-wallet:latest
     container_name: ivy-wallet
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=file:/app/data/ivy-wallet.db
+      - DATA_DIR=/data
+      - DB_PATH=/data/ivy-wallet.db
     volumes:
-      - ivy_data:/app/data
+      - ivy-data:/data
 
 volumes:
-  ivy_data:
+  ivy-data:
     driver: local
