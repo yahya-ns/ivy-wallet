@@ -16,11 +16,17 @@ export const TransactionsPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Initialize filters from URL if present
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialAccountId = queryParams.get("accountId") || "ALL";
+  const initialCategoryId = queryParams.get("categoryId") || "ALL";
+  const initialType = queryParams.get("type") || "ALL";
+
   // Filters
   const [search, setSearch] = useState("");
-  const [selectedType, setSelectedType] = useState<string>("ALL");
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("ALL");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("ALL");
+  const [selectedType, setSelectedType] = useState<string>(initialType);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(initialAccountId);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialCategoryId);
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);

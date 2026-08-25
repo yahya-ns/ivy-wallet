@@ -89,6 +89,69 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(accounts)
 }
 
+func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var a models.Account
+	var incInBal, isDel int
+
+	err := h.DB.QueryRow(`
+		SELECT id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at
+		FROM accounts
+		WHERE id = ? AND is_deleted = 0
+	`, id).Scan(&a.ID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &isDel, &a.CreatedAt, &a.UpdatedAt)
+
+	if err != nil {
+		http.Error(w, "Account not found", http.StatusNotFound)
+		return
+	}
+	a.IncludeInBalance = incInBal == 1
+	a.IsDeleted = isDel == 1
+
+	// Calculate live balances & stats
+	// 1. Transactions directly from this account
+	txRows, err := h.DB.Query(`
+		SELECT type, amount FROM transactions WHERE account_id = ? AND is_deleted = 0
+	`, a.ID)
+	if err == nil {
+		for txRows.Next() {
+			var txType string
+			var amount float64
+			_ = txRows.Scan(&txType, &amount)
+			if txType == "INCOME" {
+				a.Balance += amount
+				a.TotalIncome += amount
+			} else if txType == "EXPENSE" {
+				a.Balance -= amount
+				a.TotalExpense += amount
+			} else if txType == "TRANSFER" {
+				a.Balance -= amount
+			}
+		}
+		txRows.Close()
+	}
+
+	// 2. Incoming transfers to this account
+	toRows, err := h.DB.Query(`
+		SELECT amount, to_amount FROM transactions WHERE to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
+	`, a.ID)
+	if err == nil {
+		for toRows.Next() {
+			var amount float64
+			var toAmount sql.NullFloat64
+			_ = toRows.Scan(&amount, &toAmount)
+			if toAmount.Valid {
+				a.Balance += toAmount.Float64
+			} else {
+				a.Balance += amount
+			}
+		}
+		toRows.Close()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(a)
+}
+
 func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name             string   `json:"name"`

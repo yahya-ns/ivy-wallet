@@ -11,6 +11,7 @@ interface TransactionModalProps {
   onSuccess: () => void;
   initialType?: TransactionType;
   initialTransaction?: Transaction | null;
+  initialAccountId?: string;
   accounts: Account[];
   categories: Category[];
 }
@@ -21,6 +22,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSuccess,
   initialType = "EXPENSE",
   initialTransaction = null,
+  initialAccountId,
   accounts = [],
   categories = [],
 }) => {
@@ -51,13 +53,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAmount("");
       setTitle("");
       setDescription("");
-      setAccountId(accounts[0]?.id || "");
-      setToAccountId(accounts[1]?.id || accounts[0]?.id || "");
+      setAccountId(initialAccountId || accounts[0]?.id || "");
+      setToAccountId(accounts.find(a => a.id !== (initialAccountId || accounts[0]?.id))?.id || accounts[1]?.id || accounts[0]?.id || "");
       setCategoryId(categories[0]?.id || "");
       setDateTime(new Date().toISOString().slice(0, 16));
     }
     setError(null);
-  }, [initialTransaction, initialType, accounts, categories, isOpen]);
+  }, [initialTransaction, initialType, initialAccountId, accounts, categories, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

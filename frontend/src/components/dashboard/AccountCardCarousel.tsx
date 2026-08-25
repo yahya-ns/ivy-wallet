@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "wouter";
 import { Account } from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -16,6 +17,7 @@ export const AccountCardCarousel: React.FC<AccountCardCarouselProps> = ({
   onAddAccount,
 }) => {
   const { hideBalance } = useTheme();
+  const [, setLocation] = useLocation();
 
   return (
     <div className="space-y-3">
@@ -36,7 +38,8 @@ export const AccountCardCarousel: React.FC<AccountCardCarouselProps> = ({
         {accounts.map((acc) => (
           <IvyCard
             key={acc.id}
-            className="flex-shrink-0 w-44 sm:w-52 p-4 flex flex-col justify-between h-32 hover:border-ivy-purple/50 cursor-pointer relative group"
+            onClick={() => setLocation(`/accounts/${acc.id}`)}
+            className="flex-shrink-0 w-44 sm:w-52 p-4 flex flex-col justify-between h-32 hover:border-ivy-purple/50 hover:shadow-md transition-all cursor-pointer relative group"
           >
             <div className="flex items-center justify-between">
               <div

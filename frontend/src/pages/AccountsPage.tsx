@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { Account } from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -10,6 +11,7 @@ import { Plus, Edit2, Trash2, Wallet, CheckCircle2 } from "lucide-react";
 
 export const AccountsPage: React.FC = () => {
   const { currency, hideBalance } = useTheme();
+  const [, setLocation] = useLocation();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,7 +105,8 @@ export const AccountsPage: React.FC = () => {
           {accounts.map((acc) => (
             <IvyCard
               key={acc.id}
-              className="p-5 flex flex-col justify-between relative group hover:border-ivy-purple/40"
+              onClick={() => setLocation(`/accounts/${acc.id}`)}
+              className="p-5 flex flex-col justify-between relative group hover:border-ivy-purple/50 hover:shadow-md transition-all cursor-pointer"
             >
               <div>
                 {/* Account Top Row */}
@@ -120,15 +123,21 @@ export const AccountsPage: React.FC = () => {
                       {acc.currency}
                     </span>
                     <button
-                      onClick={() => handleEdit(acc)}
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(acc);
+                      }}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Edit Account"
                     >
                       <Edit2 size={15} />
                     </button>
                     <button
-                      onClick={() => handleDelete(acc.id)}
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(acc.id);
+                      }}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Delete Account"
                     >
                       <Trash2 size={15} />

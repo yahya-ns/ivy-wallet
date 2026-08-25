@@ -66,6 +66,7 @@ func main() {
 	r.Route("/api", func(api chi.Router) {
 		// Accounts
 		api.Get("/accounts", accountHandler.GetAll)
+		api.Get("/accounts/{id}", accountHandler.GetByID)
 		api.Post("/accounts", accountHandler.Create)
 		api.Put("/accounts/{id}", accountHandler.Update)
 		api.Delete("/accounts/{id}", accountHandler.Delete)

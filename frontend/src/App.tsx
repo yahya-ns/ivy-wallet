@@ -5,6 +5,7 @@ import { AppShell } from "@/components/navigation/AppShell";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { TransactionsPage } from "@/pages/TransactionsPage";
 import { AccountsPage } from "@/pages/AccountsPage";
+import { AccountDetailPage } from "@/pages/AccountDetailPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { BudgetsPage } from "@/pages/BudgetsPage";
 import { LoansPage } from "@/pages/LoansPage";
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/" component={DashboardPage} />
           <Route path="/transactions" component={TransactionsPage} />
           <Route path="/accounts" component={AccountsPage} />
+          <Route path="/accounts/:id" component={AccountDetailPage} />
           <Route path="/categories" component={CategoriesPage} />
           <Route path="/budgets" component={BudgetsPage} />
           <Route path="/loans" component={LoansPage} />
