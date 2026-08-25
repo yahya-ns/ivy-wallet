@@ -112,9 +112,8 @@ out/
 
 /ci-actions/compose-stability/ivy-compose-stability-report.txt
 
-# Kotlin Compiler
-.kotlin/sessions/*
-/.idea/AndroidProjectSystem.xml
-/.idea/runConfigurations.xml
-.idea
+# Android legacy mobile code (branch web-app)
+android-legacy/
+/android-legacy/
+
 

@@ -1,177 +1,220 @@
->[!IMPORTANT]
->**🚨 Notice: Project No Longer Maintained 🚨**
->
->As of **Nov 5th, 2024**, this project is no longer maintained by the original developers. No further updates, bug fixes, or support will be provided.
->
->- **Pull Requests and Issues**: We will not be reviewing or merging pull requests, nor responding to issues or discussions.
->
->- **Forking and Future Development**: In accordance with the [GPL-3.0 License](LICENSE), you are encouraged to **fork this repository** to continue development independently. You are free to modify, distribute, and release your own versions under the same license.
->
->- **Disclaimer of Liability**:
->  - **"As-Is" Basis**: This software is provided on an "as-is" basis without any warranties or conditions of any kind, either express or implied.
->  - **No Liability**: The original maintainers shall not be liable for any claims, damages, or other liabilities arising from the use, modification, or distribution of this software.
->  - **User Responsibility**: Users and developers who choose to use or fork this project assume all risks and responsibilities associated with its use and further development.
->
->For more information, please refer to the [LICENSE](LICENSE) file.
+# Ivy Wallet — Web Edition 🌿💰
 
-[![Latest Release](https://img.shields.io/github/v/release/Ivy-Apps/ivy-wallet)](https://github.com/Ivy-Apps/ivy-wallet/releases)
-[![APK](https://github.com/Ivy-Apps/ivy-wallet/actions/workflows/apk.yml/badge.svg)](https://github.com/Ivy-Apps/ivy-wallet/actions/workflows/apk.yml)
-[![Telegram Group](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+ETavgioAvWg4NThk)
+> **A modern, private, and full-stack money manager web application.**  
+> Faithfully reworked from the original Ivy Wallet mobile app into a full-featured web experience with backend, frontend, database persistence, and automated container deployment.
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![GitHub Repo stars](https://img.shields.io/github/stars/Ivy-Apps/ivy-wallet?style=social)](https://github.com/Ivy-Apps/ivy-wallet/stargazers)
-[![Fork Ivy Wallet](https://img.shields.io/github/forks/Ivy-Apps/ivy-wallet?logo=github&style=social)](https://github.com/Ivy-Apps/ivy-wallet/fork)
+---
 
-# [Ivy Wallet: money manager](https://play.google.com/store/apps/details?id=com.ivy.wallet)
+## 🌟 Overview & Philosophy
 
-|                                                                                                            |                                                                                                            |                                                                                                            |                                                                                                            |
-|:----------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------:|
-| ![1](https://user-images.githubusercontent.com/5564499/189540998-4d6cdcd3-ab4d-40f7-85d4-c82fe8a017d1.png) | ![2](https://user-images.githubusercontent.com/5564499/189541011-1ebbd8b6-50fe-432a-91e2-59206efe99ce.png) | ![3](https://user-images.githubusercontent.com/5564499/189541023-35e7f163-d639-4466-9a91-c56890d5a28e.png) | ![4](https://user-images.githubusercontent.com/5564499/189541027-d352314c-fd5c-43eb-82ad-4aba14c7b0fa.png) |
-| ![5](https://user-images.githubusercontent.com/5564499/189541030-1a0d7948-33af-420b-b126-936d0211c93f.png) | ![6](https://user-images.githubusercontent.com/5564499/189541035-621c4511-5ec7-4d3f-b08e-925d8da95472.png) | ![7](https://user-images.githubusercontent.com/5564499/189541127-7adf5bfa-0652-461c-80f1-076b7179eb6c.png) | ![8](https://user-images.githubusercontent.com/5564499/189541040-7cab633e-be4c-40b2-a2c6-890a15edf805.png) |
+**Ivy Wallet Web Edition** brings the beloved design, ease of use, and privacy of the Android Ivy Wallet app to the browser. It allows you to track expenses, incomes, multi-account net worth, monthly budgets, debt/loan repayments, and recurring subscription bills with zero cloud dependency.
 
-Ivy Wallet is a free and open source **money management android app**. It's written using **100% Kotlin and Jetpack Compose**. It's designed to help you keep track of your personal finances with ease.
+- **Offline-First & Self-Hostable**: All financial records are stored securely in your private SQLite database (`ivy-wallet.db`).
+- **Faithful Ivy UI/UX**: Distinctive curved card aesthetics (`24px` radius), Ivy color tokens, responsive mobile bottom bar, and desktop sidebar navigation.
+- **3-Mode Theme System**: **Light**, **Dark** (Ivy Signature Dark), and **True Black** (Pure OLED mode).
+- **One-Tap Privacy**: Hide or reveal account balances and amounts (`••••••`) across the entire app with a single click.
 
-Think of Ivy Wallet as a manual expense tracker that tries to replace the good old spreadsheet for managing your finances.
+---
 
-**Do you know? Ask yourself.**
+## 🚀 Key Features
 
-1) How much money do I have in total?
+### 1. 📊 Financial Dashboard
+- **Hero Balance Card**: Total net worth calculation across all active wallets, plus current month's income and expense summary.
+- **Interactive Accounts Slider**: Scrollable carousel showing cards with individual balances, currencies, and color-coded badges.
+- **Category Spending Donut Chart**: Visual distribution of monthly expenses ranked by amount and percentage.
+- **Recent Activity Feed**: Quick glance at the latest financial transactions with instant edit/delete controls.
 
-2) How much did I spend this month and what did I spend it on?
+### 2. 💳 Multi-Account & Net Worth Management
+- Manage multiple accounts: Cash, Bank Accounts, Debit/Credit Cards, Savings, and Crypto.
+- Support for multi-currency tracking (USD, EUR, IDR, GBP, JPY, CAD, AUD, etc.).
+- Option to toggle **"Include in Total Balance"** per account.
+- Live balance aggregation calculated dynamically from transactions and transfers.
 
-3) How much can I spend and still meet my financial goals?
+### 3. 💸 Advanced Transaction Ledger
+- Record **Expenses**, **Incomes**, and **Transfers** between accounts.
+- Filter transactions by type, account, category, and date range.
+- Real-time text search through titles, descriptions, and notes.
+- Grouped activity feed by relative dates (*Today*, *Yesterday*, *Last week*, etc.).
 
-A money management app can help you answer these questions.
+### 4. 🏷 Categories Customization
+- Pre-populated with standard default categories (Food & Dining, Groceries, Shopping, Transport, Bills, Salary, Entertainment, Health, etc.).
+- Create, edit, and delete custom categories.
+- Personalized color palettes and dynamic Lucide icon picker.
 
-Ivy Wallet may lack some of the features you're looking for, but it truly shines in its user interface and experience, as well as its simplicity and customization options. This was recognized in the ["Top/Best Android App in 2021/2022 charts"](https://youtube.com/playlist?list=PLguJN0waG1-eSzKMuFMIULrR3MlqJ3cAE) by the YouTube tech community.
+### 5. 🎯 Monthly Budgets & Spending Limits
+- Set monthly or custom period spending limits per category or across all expenses.
+- Visual progress bars with dynamic status indicators:
+  - 🟢 **Safe** (<80% spent)
+  - 🟠 **Warning** (80% - 100% spent)
+  - 🔴 **Over Budget** (>100% spent with overage amount)
 
-<a href='https://play.google.com/store/apps/details?id=com.ivy.wallet&utm_source=github&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' width="323" height="125"/></a>
+### 6. 🤝 Loans & Debt Tracker (I Owe / Owed to Me)
+- Track money you **borrowed** (debts to pay back) and money you **lent** (receivables to collect).
+- Record partial repayments with automatic calculation of remaining debt.
+- Optional synchronization: automatic transaction creation when loan or repayment is recorded.
 
-> Join our **[private Telegram Community](https://t.me/+ETavgioAvWg4NThk)**.
+### 7. ⏰ Planned Payments & Subscriptions
+- Automate recurring bills, salaries, rent, and subscription services (e.g. Netflix, Spotify, Gym).
+- Configurable recurrence intervals (Daily, Weekly, Monthly, Yearly).
+- **"Pay Now"** instant execution to record the scheduled payment with one click.
 
-> To support our free open source project, please give it a star. ⭐
-> This means a lot to us. Thank you so much! [![GitHub Repo stars](https://img.shields.io/github/stars/Ivy-Apps/ivy-wallet?style=social)](https://github.com/Ivy-Apps/ivy-wallet/stargazers)
+### 8. 📈 Analytics & Cash Flow Reports
+- Key metrics: Monthly Income, Monthly Expense, Net Savings, and Savings Rate (%).
+- Multi-month interactive cash flow bar charts (3, 6, or 12 months) comparing income vs expense.
+- Category breakdown with expense percentage contribution.
 
-## Project Requirements
+### 9. 💾 Backup, Export & Import
+- **JSON Full Backup**: Export complete database records and restore anytime.
+- **CSV Transaction Export**: Export transactions for spreadsheet analysis (Excel, Google Sheets).
 
-- Java 17+
-- The **latest stable** Android Studio (for easy install use [JetBrains Toolbox](https://www.jetbrains.com/toolbox-app/))
+---
 
-### Initialize the project
+## 🛠 Tech Stack & Architecture
 
-**1. Fork and clone the repo**
+```
+┌────────────────────────────────────────────────────────┐
+│                   Next.js 15 Web App                   │
+│  (React 19, TypeScript, Tailwind CSS, App Router)     │
+└───────────────┬────────────────────────┬───────────────┘
+                │                        │
+        ┌───────▼────────┐      ┌────────▼────────┐
+        │   UI Components│      │  REST API Route │
+        │  (Client Side) │      │ (Server Engine) │
+        └────────────────┘      └────────┬────────┘
+                                         │
+                                ┌────────▼────────┐
+                                │   Prisma ORM    │
+                                └────────┬────────┘
+                                         │
+                                ┌────────▼────────┐
+                                │  SQLite Engine  │
+                                │ (ivy-wallet.db) │
+                                └─────────────────┘
+```
 
-Instructions in [CONTRIBUTING.md](./CONTRIBUTING.md).
+- **Frontend**: Next.js 15 App Router, React 19, Tailwind CSS, Lucide React, Recharts, Date-fns.
+- **Backend & API**: Next.js API Route Handlers with RESTful endpoints.
+- **Database & ORM**: SQLite (`dev.db` locally / `/app/data/ivy-wallet.db` in Docker) managed via **Prisma ORM**.
+- **Deployment**: Standalone Docker image (Alpine Linux Node 22) + GitHub Actions CI/CD to GitHub Container Registry (GHCR).
 
-### Need help?
+---
 
-Join our Telegram community and drop a message in the "Development" topic.
+## 📁 Project Structure
 
-[![Telegram Group](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+ETavgioAvWg4NThk)
+```
+.
+├── src/
+│   ├── app/                      # Next.js App Router Pages & API Routes
+│   │   ├── accounts/             # Accounts management page
+│   │   ├── api/                  # RESTful API endpoints
+│   │   │   ├── accounts/         # Account CRUD & balance engine
+│   │   │   ├── backup/           # JSON/CSV export and import
+│   │   │   ├── budgets/          # Budget limit calculations
+│   │   │   ├── categories/       # Category management
+│   │   │   ├── loans/            # Loan & repayment tracking
+│   │   │   ├── planned/          # Recurring subscriptions
+│   │   │   ├── reports/          # Cashflow trends & breakdown
+│   │   │   ├── settings/         # Theme & preference settings
+│   │   │   └── transactions/     # Transaction ledger & filters
+│   │   ├── budgets/              # Budget progress page
+│   │   ├── categories/           # Category customization page
+│   │   ├── loans/                # Debts & lending tracker page
+│   │   ├── planned/              # Planned payments page
+│   │   ├── reports/              # Analytics & chart reports
+│   │   ├── settings/             # Theme switcher & backup tools
+│   │   ├── transactions/         # Filterable activity feed
+│   │   ├── globals.css           # Ivy CSS design tokens & themes
+│   │   ├── layout.tsx            # Global layout with ThemeProvider
+│   │   └── page.tsx              # Main Dashboard overview
+│   ├── components/               # Modular UI Components
+│   │   ├── account/              # Account creation/edit modal
+│   │   ├── dashboard/            # Balance card, accounts carousel, pie chart
+│   │   ├── navigation/           # Sidebar, bottom nav, header, app shell
+│   │   ├── theme/                # ThemeProvider context
+│   │   ├── transaction/          # Transaction item row & create modal
+│   │   └── ui/                   # IvyCard, IvyButton, IvyIcon, IvyModal, ThemeSwitch
+│   └── lib/                      # Utilities, constants, types, Prisma client
+├── prisma/
+│   ├── schema.prisma             # SQLite schema definition
+│   └── seed.ts                   # Initial categories, accounts & sample data
+├── public/                       # PWA manifest & vector assets
+├── android-legacy/               # Archived Android Kotlin codebase (ignored)
+├── Dockerfile                    # Multi-stage standalone Alpine container
+├── docker-compose.yml            # Container orchestration with volume persistence
+├── docker-entrypoint.sh          # Auto migration & database initializer
+└── .github/workflows/
+    └── docker-publish.yml        # GitHub Actions CI/CD pipeline
+```
 
-## Learning Materials
+---
 
-Ivy Wallet is a great place to code and learn. That's why we also link to great learning materials (books, articles, videos), check them out in **[docs/resources 📚](docs/resources/)**.
+## 🏃 Getting Started Locally
 
-Make sure to check out our short **[Developer Guidelines 🏗️](docs/Guidelines.md)** to learn more about the technical side of the Ivy Wallet.
+### Prerequisites
+- **Node.js**: v20.x or v22.x LTS
+- **npm** or **pnpm** / **yarn**
 
-## Tech Stack
+### Step-by-Step Setup
 
-### Core
+1. **Clone & Switch to `web-app` Branch**:
+   ```bash
+   git clone https://github.com/yahya-ns/ivy-wallet.git
+   cd ivy-wallet
+   git checkout web-app
+   ```
 
-- 100% [Kotlin](https://kotlinlang.org/)
-- 100% [Jetpack Compose](https://developer.android.com/jetpack/compose)
-- [Material3 design](https://m3.material.io/) (UI components)
-- [Kotlin Coroutines](https://kotlinlang.org/docs/coroutines-overview.html) (structured concurrency)
-- [Kotlin Flow](https://kotlinlang.org/docs/flow.html) (reactive data stream)
-- [Hilt](https://dagger.dev/hilt/) (DI)
-- [ArrowKt](https://arrow-kt.io/) (functional programming)
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
 
+3. **Initialize Database & Seed Default Data**:
+   ```bash
+   npx prisma db push
+   npm run db:seed
+   ```
 
-### Testing
-- [JUnit4](https://github.com/junit-team/junit4) (test framework, compatible with Android)
-- [Kotest](https://kotest.io/) (unit test assertions)
-- [Paparazzi](https://github.com/cashapp/paparazzi) (screenshot testing)
+4. **Run the Development Server**:
+   ```bash
+   npm run dev
+   ```
 
-### Local Persistence
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) (key-value storage)
-- [Room DB](https://developer.android.com/training/data-storage/room) (SQLite ORM)
+5. **Access the App**:
+   Open [http://localhost:3000](http://localhost:3000) in your web browser.
 
-### Networking
-- [Ktor client](https://ktor.io/docs/getting-started-ktor-client.html) (HTTP client)
-- [Kotlinx Serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
+---
 
-### Build & CI
-- [Gradle KTS](https://docs.gradle.org/current/userguide/kotlin_dsl.html) (Kotlin DSL)
-- [Gradle convention plugins](https://docs.gradle.org/current/samples/sample_convention_plugins.html) (build logic)
-- [Gradle version catalogs](https://developer.android.com/build/migrate-to-catalogs) (dependencies versions)
-- [GitHub Actions](https://github.com/Ivy-Apps/ivy-wallet/actions) (CI/CD)
-- [Fastlane](https://fastlane.tools/) (uploads the app to the Google Play Store)
+## 🐳 Docker Deployment
 
-### Other
-- [Firebase Crashlytics](https://firebase.google.com/products/crashlytics) (stability monitoring)
-- [Timber](https://github.com/JakeWharton/timber) (logging)
-- [Detekt](https://github.com/detekt/detekt) (linter)
-- [Ktlint](https://github.com/pinterest/ktlint) (linter)
-- [Slack's compose-lints](https://slackhq.github.io/compose-lints/) (linter)
+### Using Docker Compose (Recommended)
 
-## Contribute
+Run the entire application in a self-contained environment with persistent storage:
 
-**Want to contribute?** See **[CONTRIBUTING.md](/CONTRIBUTING.md)** [![Fork Ivy Wallet](https://img.shields.io/github/forks/Ivy-Apps/ivy-wallet?logo=github&style=social)](https://github.com/Ivy-Apps/ivy-wallet/fork)
+```bash
+# Build and start container in background
+docker compose up -d --build
+```
 
-### Contributors Wall:
+The app will be accessible at `http://localhost:3000`. Database data is persisted inside the `ivy_data` named volume (`/app/data/ivy-wallet.db`).
 
-<a href="https://github.com/ILIYANGERMANOV/ivy-wallet/graphs/contributors">
-  <img alt="contributors graph" src="https://contrib.rocks/image?repo=Ivy-Apps/ivy-wallet" />
-</a>
-<br>
-<br>
+To stop the container:
+```bash
+docker compose down
+```
 
-_Note: It may take up to 24 hours for the [contrib.rocks](https://contrib.rocks/preview?repo=Ivy-Apps%2Fivy-wallet) plugin to update._ 
+---
 
-**P.S.** You'll also be recognized in a special "Contributors" section. We salute you! 👏
+## 🔄 GitHub Actions CI/CD
 
-## Creative Contributors
+This repository includes an automated GitHub Actions workflow (`.github/workflows/docker-publish.yml`) configured specifically for the `web-app` branch:
 
-Folks that helped Ivy Wallet in a non-dev creative ways that can't be captured on GitHub.
+- **Trigger**: Every push to branch `web-app` or tag release (`v*.*.*`).
+- **Registry**: [GitHub Container Registry (GHCR)](https://ghcr.io).
+- **Image**: `ghcr.io/yahya-ns/ivy-wallet:web-app`
+- **Multi-Arch**: Supports `linux/amd64` and `linux/arm64`.
 
-### Creative Contributors Wall:
+---
 
-<!-- <div align="center">
-  <a href="URL_TO_CONTRIBUTION">
-    <img src="URL_TO_PERSONS_PHOTO" width="100px;" alt="PERSON'S PHOTO"/><br>
-    <strong>USERNAME</strong><br>
-    <small>MESSAGE_FOR_THEIR_CONTRIBUTION</small>
-  </a>
-</div> -->
+## 📄 License
 
-<div style="text-align: center">
-    <img src="https://avatars.githubusercontent.com/u/62771583?v=4" width="100px;" alt="Stefan Ilijev - Desinger"/><br>
-    <strong>Stefan Ilijev</strong><br>
-    <small>Co-founder and designer of Ivy Wallet. Created the <a href="https://www.figma.com/file/kSwIa07jcHEHZXo6rzx7dn/Design-System?node-id=0%3A1&mode=dev">Ivy design system</a>.</small>
-    <br/>
-    <br/>
-</div>
-
-<div style="text-align: center">
-    <img src="https://avatars.githubusercontent.com/u/86833171?v=4" width="100px;" alt="Aditya [ADX]"/><br>
-    <strong><a href="https://github.com/adx69" >Aditya</a> </strong><br>
-    <br/>
-</div>
-
-<div style="text-align: center">
-    <img src="https://avatars.githubusercontent.com/u/130169485?v=4" width="100px;" alt="Shymom [SSI]"/><br>
-    <strong><a href="https://github.com/SHYMOM" >Shymom</a> </strong><br>
-    <br/>
-</div>
-
-
-## Community Projects
-
-> ⚠️ Disclaimer: The community projects listed are independently developed and not affiliated with Ivy Apps Ltd. Consequently, we cannot vouch for their functionality, security or intentions. Your engagement with these projects is solely at your own discretion and risk. Ivy Apps Ltd explicitly disclaims any warranties, express or implied, and shall not be held liable for any damages or losses resulting from the use of these community-developed projects.
-> 
-### [ivy-wallet-web](https://github.com/pratikkabade/ivy-wallet-web) by [Pratik Kabade](https://github.com/pratikkabade)
-
-This community-developed project allows users to conveniently access Ivy Wallet through their **web browsers**, ensuring a smooth experience across multiple platforms.
-- [GitHub URL](https://github.com/pratikkabade/ivy-wallet-web)
-- [Web app URL](https://ivy-wallet-web.vercel.app/)
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](LICENSE) file for details.
