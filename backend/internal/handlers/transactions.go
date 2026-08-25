@@ -23,6 +23,8 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	accountID := q.Get("accountId")
 	categoryID := q.Get("categoryId")
+	subcategoryID := q.Get("subcategoryId")
+	tagID := q.Get("tagId")
 	txType := q.Get("type")
 	search := q.Get("search")
 	startDate := q.Get("startDate")
@@ -32,15 +34,17 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 	query := `
 		SELECT t.id, t.account_id, t.type, t.amount, t.to_account_id, t.to_amount,
-		       t.title, t.description, t.date_time, t.category_id, t.due_date,
+		       t.title, t.description, t.date_time, t.category_id, t.subcategory_id, t.due_date,
 		       t.recurring_rule_id, t.loan_id, t.loan_record_id, t.is_deleted, t.created_at, t.updated_at,
 		       a.name, a.currency, a.color, a.icon,
 		       ta.name, ta.currency, ta.color, ta.icon,
-		       c.name, c.color, c.icon
+		       c.name, c.color, c.icon,
+		       sc.name, sc.color, sc.icon
 		FROM transactions t
 		LEFT JOIN accounts a ON t.account_id = a.id
 		LEFT JOIN accounts ta ON t.to_account_id = ta.id
 		LEFT JOIN categories c ON t.category_id = c.id
+		LEFT JOIN categories sc ON t.subcategory_id = sc.id
 		WHERE t.is_deleted = 0
 	`
 
@@ -56,14 +60,25 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		args = append(args, categoryID)
 	}
 
+	if subcategoryID != "" && subcategoryID != "ALL" {
+		query += " AND t.subcategory_id = ?"
+		args = append(args, subcategoryID)
+	}
+
+	if tagID != "" && tagID != "ALL" {
+		query += " AND t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)"
+		args = append(args, tagID)
+	}
+
 	if txType != "" && txType != "ALL" {
 		query += " AND t.type = ?"
 		args = append(args, txType)
 	}
 
 	if search != "" {
-		query += " AND (t.title LIKE ? OR t.description LIKE ?)"
-		args = append(args, "%"+search+"%", "%"+search+"%")
+		searchTerm := "%" + search + "%"
+		query += " AND (t.title LIKE ? OR t.description LIKE ? OR t.id IN (SELECT tt.transaction_id FROM transaction_tags tt JOIN tags tg ON tt.tag_id = tg.id WHERE tg.name LIKE ?))"
+		args = append(args, searchTerm, searchTerm, searchTerm)
 	}
 
 	if startDate != "" {
@@ -104,9 +119,10 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	transactions := []models.Transaction{}
+	txIDs := []string{}
 	for rows.Next() {
 		var t models.Transaction
-		var toAccID, title, desc, catID, recRuleID, loanID, loanRecID sql.NullString
+		var toAccID, title, desc, catID, subcatID, recRuleID, loanID, loanRecID sql.NullString
 		var toAmt sql.NullFloat64
 		var dueDate sql.NullTime
 		var isDel int
@@ -114,14 +130,16 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		var aName, aCurr, aColor, aIcon sql.NullString
 		var taName, taCurr, taColor, taIcon sql.NullString
 		var cName, cColor, cIcon sql.NullString
+		var scName, scColor, scIcon sql.NullString
 
 		err := rows.Scan(
 			&t.ID, &t.AccountId, &t.Type, &t.Amount, &toAccID, &toAmt,
-			&title, &desc, &t.DateTime, &catID, &dueDate,
+			&title, &desc, &t.DateTime, &catID, &subcatID, &dueDate,
 			&recRuleID, &loanID, &loanRecID, &isDel, &t.CreatedAt, &t.UpdatedAt,
 			&aName, &aCurr, &aColor, &aIcon,
 			&taName, &taCurr, &taColor, &taIcon,
 			&cName, &cColor, &cIcon,
+			&scName, &scColor, &scIcon,
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,6 +160,9 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		}
 		if catID.Valid {
 			t.CategoryId = &catID.String
+		}
+		if subcatID.Valid {
+			t.SubcategoryId = &subcatID.String
 		}
 		if dueDate.Valid {
 			t.DueDate = &dueDate.Time
@@ -186,7 +207,63 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if subcatID.Valid && scName.Valid {
+			t.Subcategory = &models.Category{
+				ID:       subcatID.String,
+				Name:     scName.String,
+				Color:    scColor.String,
+				Icon:     scIcon.String,
+				ParentId: t.CategoryId,
+			}
+		}
+
+		t.Tags = []models.Tag{}
+		t.TagIds = []string{}
+
 		transactions = append(transactions, t)
+		txIDs = append(txIDs, t.ID)
+	}
+
+	// Fetch tags for all returned transactions
+	if len(txIDs) > 0 {
+		placeholders := strings.Repeat("?,", len(txIDs))
+		placeholders = placeholders[:len(placeholders)-1]
+		tagArgs := make([]interface{}, len(txIDs))
+		for i, id := range txIDs {
+			tagArgs[i] = id
+		}
+
+		tagQuery := `
+			SELECT tt.transaction_id, tg.id, tg.name, tg.color, tg.order_num
+			FROM transaction_tags tt
+			JOIN tags tg ON tt.tag_id = tg.id
+			WHERE tt.transaction_id IN (` + placeholders + `) AND tg.is_deleted = 0
+			ORDER BY tg.order_num ASC, tg.name ASC
+		`
+
+		tagRows, err := h.DB.Query(tagQuery, tagArgs...)
+		if err == nil {
+			defer tagRows.Close()
+			tagsByTx := make(map[string][]models.Tag)
+			for tagRows.Next() {
+				var txID string
+				var tag models.Tag
+				if err := tagRows.Scan(&txID, &tag.ID, &tag.Name, &tag.Color, &tag.OrderNum); err == nil {
+					tagsByTx[txID] = append(tagsByTx[txID], tag)
+				}
+			}
+
+			for i := range transactions {
+				if tags, ok := tagsByTx[transactions[i].ID]; ok {
+					transactions[i].Tags = tags
+					tagIds := make([]string, len(tags))
+					for j, tg := range tags {
+						tagIds[j] = tg.ID
+					}
+					transactions[i].TagIds = tagIds
+				}
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -204,6 +281,8 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Description     *string  `json:"description"`
 		DateTime        *string  `json:"dateTime"`
 		CategoryId      *string  `json:"categoryId"`
+		SubcategoryId   *string  `json:"subcategoryId"`
+		TagIds          []string `json:"tagIds"`
 		DueDate         *string  `json:"dueDate"`
 		RecurringRuleId *string  `json:"recurringRuleId"`
 		LoanId          *string  `json:"loanId"`
@@ -238,14 +317,36 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	amount := math.Abs(input.Amount)
 
+	if input.CategoryId != nil && *input.CategoryId == "" {
+		input.CategoryId = nil
+	}
+	if input.SubcategoryId != nil && *input.SubcategoryId == "" {
+		input.SubcategoryId = nil
+	}
+
 	_, err := h.DB.Exec(`
-		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-	`, id, input.AccountId, strings.ToUpper(input.Type), amount, input.ToAccountId, input.ToAmount, input.Title, input.Description, dt, input.CategoryId, parsedDueDate, input.RecurringRuleId, input.LoanId, input.LoanRecordId, now, now)
+		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+	`, id, input.AccountId, strings.ToUpper(input.Type), amount, input.ToAccountId, input.ToAmount, input.Title, input.Description, dt, input.CategoryId, input.SubcategoryId, parsedDueDate, input.RecurringRuleId, input.LoanId, input.LoanRecordId, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Insert transaction tags
+	tags := []models.Tag{}
+	if len(input.TagIds) > 0 {
+		for _, tagID := range input.TagIds {
+			if strings.TrimSpace(tagID) != "" {
+				_, _ = h.DB.Exec("INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)", id, tagID)
+
+				var tag models.Tag
+				if err := h.DB.QueryRow("SELECT id, name, color, order_num FROM tags WHERE id = ?", tagID).Scan(&tag.ID, &tag.Name, &tag.Color, &tag.OrderNum); err == nil {
+					tags = append(tags, tag)
+				}
+			}
+		}
 	}
 
 	res := models.Transaction{
@@ -259,10 +360,13 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Description:     input.Description,
 		DateTime:        dt,
 		CategoryId:      input.CategoryId,
+		SubcategoryId:   input.SubcategoryId,
 		DueDate:         parsedDueDate,
 		RecurringRuleId: input.RecurringRuleId,
 		LoanId:          input.LoanId,
 		LoanRecordId:    input.LoanRecordId,
+		Tags:            tags,
+		TagIds:          input.TagIds,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -275,16 +379,18 @@ func (h *TransactionHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var input struct {
-		AccountId   *string  `json:"accountId"`
-		Type        *string  `json:"type"`
-		Amount      *float64 `json:"amount"`
-		ToAccountId *string  `json:"toAccountId"`
-		ToAmount    *float64 `json:"toAmount"`
-		Title       *string  `json:"title"`
-		Description *string  `json:"description"`
-		DateTime    *string  `json:"dateTime"`
-		CategoryId  *string  `json:"categoryId"`
-		DueDate     *string  `json:"dueDate"`
+		AccountId     *string   `json:"accountId"`
+		Type          *string   `json:"type"`
+		Amount        *float64  `json:"amount"`
+		ToAccountId   *string   `json:"toAccountId"`
+		ToAmount      *float64  `json:"toAmount"`
+		Title         *string   `json:"title"`
+		Description   *string   `json:"description"`
+		DateTime      *string   `json:"dateTime"`
+		CategoryId    *string   `json:"categoryId"`
+		SubcategoryId *string   `json:"subcategoryId"`
+		TagIds        *[]string `json:"tagIds"`
+		DueDate       *string   `json:"dueDate"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -295,16 +401,16 @@ func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 
 	var existing models.Transaction
-	var toAccID, title, desc, catID sql.NullString
+	var toAccID, title, desc, catID, subcatID sql.NullString
 	var toAmt sql.NullFloat64
 	var dueDate sql.NullTime
 
 	err := h.DB.QueryRow(`
-		SELECT account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date
+		SELECT account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date
 		FROM transactions WHERE id = ?
 	`, id).Scan(
 		&existing.AccountId, &existing.Type, &existing.Amount, &toAccID, &toAmt,
-		&title, &desc, &existing.DateTime, &catID, &dueDate,
+		&title, &desc, &existing.DateTime, &catID, &subcatID, &dueDate,
 	)
 	if err != nil {
 		http.Error(w, "Transaction not found", http.StatusNotFound)
@@ -338,7 +444,18 @@ func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if input.CategoryId != nil {
-		existing.CategoryId = input.CategoryId
+		if *input.CategoryId == "" {
+			existing.CategoryId = nil
+		} else {
+			existing.CategoryId = input.CategoryId
+		}
+	}
+	if input.SubcategoryId != nil {
+		if *input.SubcategoryId == "" {
+			existing.SubcategoryId = nil
+		} else {
+			existing.SubcategoryId = input.SubcategoryId
+		}
 	}
 	if input.DueDate != nil && *input.DueDate != "" {
 		if parsed, err := time.Parse(time.RFC3339, *input.DueDate); err == nil {
@@ -349,14 +466,24 @@ func (h *TransactionHandler) Update(w http.ResponseWriter, r *http.Request) {
 	_, err = h.DB.Exec(`
 		UPDATE transactions
 		SET account_id = ?, type = ?, amount = ?, to_account_id = ?, to_amount = ?,
-		    title = ?, description = ?, date_time = ?, category_id = ?, due_date = ?, updated_at = ?
+		    title = ?, description = ?, date_time = ?, category_id = ?, subcategory_id = ?, due_date = ?, updated_at = ?
 		WHERE id = ?
 	`, existing.AccountId, existing.Type, existing.Amount, existing.ToAccountId, existing.ToAmount,
-		existing.Title, existing.Description, existing.DateTime, existing.CategoryId, existing.DueDate, now, id)
+		existing.Title, existing.Description, existing.DateTime, existing.CategoryId, existing.SubcategoryId, existing.DueDate, now, id)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Update tags if provided
+	if input.TagIds != nil {
+		_, _ = h.DB.Exec("DELETE FROM transaction_tags WHERE transaction_id = ?", id)
+		for _, tagID := range *input.TagIds {
+			if strings.TrimSpace(tagID) != "" {
+				_, _ = h.DB.Exec("INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)", id, tagID)
+			}
+		}
 	}
 
 	existing.ID = id
@@ -382,3 +509,4 @@ func (h *TransactionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
+

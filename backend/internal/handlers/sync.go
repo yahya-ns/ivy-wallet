@@ -54,37 +54,57 @@ func (h *SyncHandler) PullSync(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Categories
 	catRows, err := h.DB.Query(`
-		SELECT id, name, color, icon, order_num, is_deleted, created_at, updated_at
+		SELECT id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at
 		FROM categories WHERE updated_at > ?
 	`, since)
 	if err == nil {
 		for catRows.Next() {
 			var c models.Category
+			var parentID sql.NullString
 			var isDel int
-			_ = catRows.Scan(&c.ID, &c.Name, &c.Color, &c.Icon, &c.OrderNum, &isDel, &c.CreatedAt, &c.UpdatedAt)
+			_ = catRows.Scan(&c.ID, &c.Name, &c.Color, &c.Icon, &c.OrderNum, &parentID, &isDel, &c.CreatedAt, &c.UpdatedAt)
+			if parentID.Valid && parentID.String != "" {
+				c.ParentId = &parentID.String
+			}
 			c.IsDeleted = isDel == 1
 			resp.Categories = append(resp.Categories, c)
 		}
 		catRows.Close()
 	}
 
+	// 2.5 Tags
+	tagRows, err := h.DB.Query(`
+		SELECT id, name, color, order_num, is_deleted, created_at, updated_at
+		FROM tags WHERE updated_at > ?
+	`, since)
+	if err == nil {
+		for tagRows.Next() {
+			var tg models.Tag
+			var isDel int
+			_ = tagRows.Scan(&tg.ID, &tg.Name, &tg.Color, &tg.OrderNum, &isDel, &tg.CreatedAt, &tg.UpdatedAt)
+			tg.IsDeleted = isDel == 1
+			resp.Tags = append(resp.Tags, tg)
+		}
+		tagRows.Close()
+	}
+
 	// 3. Transactions
 	txRows, err := h.DB.Query(`
 		SELECT id, account_id, type, amount, to_account_id, to_amount, title, description, date_time,
-		       category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at
+		       category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at
 		FROM transactions WHERE updated_at > ?
 	`, since)
 	if err == nil {
 		for txRows.Next() {
 			var t models.Transaction
-			var toAccID, title, desc, catID, recRuleID, loanID, loanRecID sql.NullString
+			var toAccID, title, desc, catID, subcatID, recRuleID, loanID, loanRecID sql.NullString
 			var toAmt sql.NullFloat64
 			var dueDate sql.NullTime
 			var isDel int
 
 			_ = txRows.Scan(
 				&t.ID, &t.AccountId, &t.Type, &t.Amount, &toAccID, &toAmt,
-				&title, &desc, &t.DateTime, &catID, &dueDate,
+				&title, &desc, &t.DateTime, &catID, &subcatID, &dueDate,
 				&recRuleID, &loanID, &loanRecID, &isDel, &t.CreatedAt, &t.UpdatedAt,
 			)
 
@@ -102,6 +122,9 @@ func (h *SyncHandler) PullSync(w http.ResponseWriter, r *http.Request) {
 			}
 			if catID.Valid {
 				t.CategoryId = &catID.String
+			}
+			if subcatID.Valid {
+				t.SubcategoryId = &subcatID.String
 			}
 			if dueDate.Valid {
 				t.DueDate = &dueDate.Time
@@ -225,6 +248,11 @@ func (h *SyncHandler) PushSync(w http.ResponseWriter, r *http.Request) {
 	// 2. Process Categories
 	for _, c := range payload.Categories {
 		_ = h.DB.UpsertCategory(c, now)
+	}
+
+	// 2.5 Process Tags
+	for _, tg := range payload.Tags {
+		_ = h.DB.UpsertTag(tg, now)
 	}
 
 	// 3. Process Transactions

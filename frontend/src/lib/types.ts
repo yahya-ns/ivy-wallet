@@ -25,7 +25,21 @@ export interface Category {
   color: string;
   icon: string;
   orderNum: number;
+  parentId?: string | null;
   isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  subcategories?: Category[];
+  parent?: Category;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  orderNum: number;
+  isDeleted: boolean;
+  transactionCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,6 +55,7 @@ export interface Transaction {
   description?: string | null;
   dateTime: string;
   categoryId?: string | null;
+  subcategoryId?: string | null;
   dueDate?: string | null;
   recurringRuleId?: string | null;
   loanId?: string | null;
@@ -51,6 +66,9 @@ export interface Transaction {
   account?: Account;
   toAccount?: Account;
   category?: Category;
+  subcategory?: Category;
+  tags?: Tag[];
+  tagIds?: string[];
 }
 
 export interface Budget {

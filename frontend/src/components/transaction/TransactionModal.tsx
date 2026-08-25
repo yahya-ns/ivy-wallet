@@ -4,6 +4,7 @@ import { IvyButton } from "@/components/ui/IvyButton";
 import { AmountInput } from "@/components/ui/AmountInput";
 import { AccountSelect } from "@/components/ui/AccountSelect";
 import { CategorySelect } from "@/components/ui/CategorySelect";
+import { TagInput } from "@/components/ui/TagInput";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { numberToAmountInput, parseAmountInput } from "@/lib/amountUtils";
 import { Account, Category, Transaction, TransactionType } from "@/lib/types";
@@ -36,10 +37,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [accountId, setAccountId] = useState<string>("");
   const [toAccountId, setToAccountId] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
+  const [subcategoryId, setSubcategoryId] = useState<string>("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [dateTime, setDateTime] = useState<string>("");
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Available subcategories for the currently selected main category
+  const activeCategory = categories.find((c) => c.id === categoryId);
+  const availableSubcategories = categories.filter((c) => c.parentId === categoryId);
 
   useEffect(() => {
     if (initialTransaction) {
@@ -50,6 +57,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAccountId(initialTransaction.accountId);
       setToAccountId(initialTransaction.toAccountId || "");
       setCategoryId(initialTransaction.categoryId || "");
+      setSubcategoryId(initialTransaction.subcategoryId || "");
+      setTagIds(
+        initialTransaction.tagIds ||
+          initialTransaction.tags?.map((t) => t.id) ||
+          []
+      );
       setDateTime(initialTransaction.dateTime || new Date().toISOString());
     } else {
       setType(initialType);
@@ -57,12 +70,25 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setTitle("");
       setDescription("");
       setAccountId(initialAccountId || accounts[0]?.id || "");
-      setToAccountId(accounts.find(a => a.id !== (initialAccountId || accounts[0]?.id))?.id || accounts[1]?.id || accounts[0]?.id || "");
-      setCategoryId(categories[0]?.id || "");
+      setToAccountId(
+        accounts.find((a) => a.id !== (initialAccountId || accounts[0]?.id))?.id ||
+          accounts[1]?.id ||
+          accounts[0]?.id ||
+          ""
+      );
+      const firstRootCat = categories.find((c) => !c.parentId);
+      setCategoryId(firstRootCat?.id || categories[0]?.id || "");
+      setSubcategoryId("");
+      setTagIds([]);
       setDateTime(new Date().toISOString());
     }
     setError(null);
   }, [initialTransaction, initialType, initialAccountId, accounts, categories, isOpen]);
+
+  const handleCategoryChange = (newCatId: string) => {
+    setCategoryId(newCatId);
+    setSubcategoryId(""); // reset subcategory on main category change
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,6 +118,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         accountId,
         toAccountId: type === "TRANSFER" ? toAccountId : null,
         categoryId: type !== "TRANSFER" ? categoryId || null : null,
+        subcategoryId: type !== "TRANSFER" ? subcategoryId || null : null,
+        tagIds: type !== "TRANSFER" ? tagIds : [],
         dateTime: dateTime ? new Date(dateTime).toISOString() : new Date().toISOString(),
       };
 
@@ -194,28 +222,67 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-                Account
-              </label>
-              <AccountSelect
-                value={accountId}
-                onChange={setAccountId}
-                accounts={accounts}
-              />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
+                  Account
+                </label>
+                <AccountSelect
+                  value={accountId}
+                  onChange={setAccountId}
+                  accounts={accounts}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
+                  Category
+                </label>
+                <CategorySelect
+                  value={categoryId}
+                  onChange={handleCategoryChange}
+                  categories={categories}
+                  onlyRoot={true}
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-                Category
-              </label>
-              <CategorySelect
-                value={categoryId}
-                onChange={setCategoryId}
-                categories={categories}
-              />
-            </div>
+            {/* Subcategory Selector (Appears when category has subcategories) */}
+            {availableSubcategories.length > 0 && (
+              <div className="p-3 bg-[var(--bg-surface-elevated)]/60 rounded-2xl border border-[var(--border-subtle)] space-y-2">
+                <label className="block text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                  Sub-Category (Optional)
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSubcategoryId("")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      !subcategoryId
+                        ? "bg-ivy-purple text-white shadow-xs"
+                        : "bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]"
+                    }`}
+                  >
+                    General / None
+                  </button>
+                  {availableSubcategories.map((sub) => (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setSubcategoryId(sub.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        subcategoryId === sub.id
+                          ? "bg-ivy-purple text-white shadow-xs"
+                          : "bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)]"
+                      }`}
+                    >
+                      <span>{sub.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -237,6 +304,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-ivy-purple"
           />
         </div>
+
+        {/* Multi-Tag Input */}
+        {type !== "TRANSFER" && (
+          <TagInput
+            selectedTagIds={tagIds}
+            onChange={setTagIds}
+            label="Tags"
+            placeholder="Type #tag or pick from list..."
+          />
+        )}
 
         {/* Date Time */}
         <DateTimePicker
@@ -261,3 +338,4 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     </IvyModal>
   );
 };
+

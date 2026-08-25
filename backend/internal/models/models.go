@@ -19,14 +19,33 @@ type Account struct {
 }
 
 type Category struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Color     string    `json:"color"`
-	Icon      string    `json:"icon"`
-	OrderNum  int       `json:"orderNum"`
-	IsDeleted bool      `json:"isDeleted"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Color         string     `json:"color"`
+	Icon          string     `json:"icon"`
+	OrderNum      int        `json:"orderNum"`
+	ParentId      *string    `json:"parentId,omitempty"`
+	IsDeleted     bool       `json:"isDeleted"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	Subcategories []Category `json:"subcategories,omitempty"`
+	Parent        *Category  `json:"parent,omitempty"`
+}
+
+type Tag struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Color            string    `json:"color"`
+	OrderNum         int       `json:"orderNum"`
+	IsDeleted        bool      `json:"isDeleted"`
+	TransactionCount int       `json:"transactionCount,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type TransactionTag struct {
+	TransactionId string `json:"transactionId"`
+	TagId         string `json:"tagId"`
 }
 
 type Transaction struct {
@@ -40,6 +59,7 @@ type Transaction struct {
 	Description     *string    `json:"description,omitempty"`
 	DateTime        time.Time  `json:"dateTime"`
 	CategoryId      *string    `json:"categoryId,omitempty"`
+	SubcategoryId   *string    `json:"subcategoryId,omitempty"`
 	DueDate         *time.Time `json:"dueDate,omitempty"`
 	RecurringRuleId *string    `json:"recurringRuleId,omitempty"`
 	LoanId          *string    `json:"loanId,omitempty"`
@@ -49,9 +69,12 @@ type Transaction struct {
 	UpdatedAt       time.Time  `json:"updatedAt"`
 
 	// Relational fields for client
-	Account   *Account   `json:"account,omitempty"`
-	ToAccount *Account   `json:"toAccount,omitempty"`
-	Category  *Category  `json:"category,omitempty"`
+	Account     *Account  `json:"account,omitempty"`
+	ToAccount   *Account  `json:"toAccount,omitempty"`
+	Category    *Category `json:"category,omitempty"`
+	Subcategory *Category `json:"subcategory,omitempty"`
+	Tags        []Tag     `json:"tags,omitempty"`
+	TagIds      []string  `json:"tagIds,omitempty"`
 }
 
 type Budget struct {
@@ -167,6 +190,7 @@ type SyncPayload struct {
 	LastSyncTime *time.Time           `json:"lastSyncTime"`
 	Accounts     []Account            `json:"accounts"`
 	Categories   []Category           `json:"categories"`
+	Tags         []Tag                `json:"tags"`
 	Transactions []Transaction        `json:"transactions"`
 	Budgets      []Budget             `json:"budgets"`
 	Loans        []Loan               `json:"loans"`
@@ -178,6 +202,7 @@ type SyncResponse struct {
 	SyncTime     time.Time            `json:"syncTime"`
 	Accounts     []Account            `json:"accounts"`
 	Categories   []Category           `json:"categories"`
+	Tags         []Tag                `json:"tags"`
 	Transactions []Transaction        `json:"transactions"`
 	Budgets      []Budget             `json:"budgets"`
 	Loans        []Loan               `json:"loans"`

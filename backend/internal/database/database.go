@@ -167,6 +167,18 @@ func (db *DB) migrateSQLite() error {
 		color TEXT NOT NULL DEFAULT '#12B880',
 		icon TEXT NOT NULL DEFAULT 'tag',
 		order_num INTEGER NOT NULL DEFAULT 0,
+		parent_id TEXT,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS tags (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL UNIQUE,
+		color TEXT NOT NULL DEFAULT '#5C3DF5',
+		order_num INTEGER NOT NULL DEFAULT 0,
 		is_deleted INTEGER NOT NULL DEFAULT 0,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -183,6 +195,7 @@ func (db *DB) migrateSQLite() error {
 		description TEXT,
 		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		category_id TEXT,
+		subcategory_id TEXT,
 		due_date DATETIME,
 		recurring_rule_id TEXT,
 		loan_id TEXT,
@@ -192,7 +205,16 @@ func (db *DB) migrateSQLite() error {
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
 		FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
-		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+		FOREIGN KEY (subcategory_id) REFERENCES categories(id) ON DELETE SET NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS transaction_tags (
+		transaction_id TEXT NOT NULL,
+		tag_id TEXT NOT NULL,
+		PRIMARY KEY (transaction_id, tag_id),
+		FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+		FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 	);
 
 	CREATE TABLE IF NOT EXISTS budgets (
@@ -273,6 +295,13 @@ func (db *DB) migrateSQLite() error {
 	// Safely add columns if upgrading existing database
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN date_format TEXT NOT NULL DEFAULT 'YYYY-MM-DD'")
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN time_format TEXT NOT NULL DEFAULT '24_HOUR'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN parent_id TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN subcategory_id TEXT")
+
+	// Create indexes after columns are guaranteed to exist
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_transactions_subcategory ON transactions(subcategory_id)")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tag_id)")
 	return nil
 }
 
@@ -311,6 +340,17 @@ func (db *DB) migratePostgres() error {
 		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
 		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
 		order_num INTEGER NOT NULL DEFAULT 0,
+		parent_id VARCHAR(64) REFERENCES categories(id) ON DELETE CASCADE,
+		is_deleted INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS tags (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
+		order_num INTEGER NOT NULL DEFAULT 0,
 		is_deleted INTEGER NOT NULL DEFAULT 0,
 		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -327,6 +367,7 @@ func (db *DB) migratePostgres() error {
 		description TEXT,
 		date_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		category_id VARCHAR(64) REFERENCES categories(id) ON DELETE SET NULL,
+		subcategory_id VARCHAR(64) REFERENCES categories(id) ON DELETE SET NULL,
 		due_date TIMESTAMP WITH TIME ZONE,
 		recurring_rule_id VARCHAR(64),
 		loan_id VARCHAR(64),
@@ -334,6 +375,12 @@ func (db *DB) migratePostgres() error {
 		is_deleted INTEGER NOT NULL DEFAULT 0,
 		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS transaction_tags (
+		transaction_id VARCHAR(64) NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+		tag_id VARCHAR(64) NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+		PRIMARY KEY (transaction_id, tag_id)
 	);
 
 	CREATE TABLE IF NOT EXISTS budgets (
@@ -408,6 +455,13 @@ func (db *DB) migratePostgres() error {
 	// Safely add columns if upgrading existing database
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD'")
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS subcategory_id VARCHAR(64)")
+
+	// Create indexes after columns are guaranteed to exist
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_transactions_subcategory ON transactions(subcategory_id)")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_categories_parent ON categories(parent_id)")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_transaction_tags_tag ON transaction_tags(tag_id)")
 	return nil
 }
 
@@ -446,6 +500,17 @@ func (db *DB) migrateMariaDB() error {
 		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
 		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
 		order_num INT NOT NULL DEFAULT 0,
+		parent_id VARCHAR(64),
+		is_deleted INT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS tags (
+		id VARCHAR(64) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL UNIQUE,
+		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
+		order_num INT NOT NULL DEFAULT 0,
 		is_deleted INT NOT NULL DEFAULT 0,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -462,6 +527,7 @@ func (db *DB) migrateMariaDB() error {
 		description TEXT,
 		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		category_id VARCHAR(64),
+		subcategory_id VARCHAR(64),
 		due_date DATETIME,
 		recurring_rule_id VARCHAR(64),
 		loan_id VARCHAR(64),
@@ -471,7 +537,16 @@ func (db *DB) migrateMariaDB() error {
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
 		FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
-		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+		FOREIGN KEY (subcategory_id) REFERENCES categories(id) ON DELETE SET NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+	CREATE TABLE IF NOT EXISTS transaction_tags (
+		transaction_id VARCHAR(64) NOT NULL,
+		tag_id VARCHAR(64) NOT NULL,
+		PRIMARY KEY (transaction_id, tag_id),
+		FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+		FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 	CREATE TABLE IF NOT EXISTS budgets (
@@ -549,6 +624,11 @@ func (db *DB) migrateMariaDB() error {
 			}
 		}
 	}
+
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD'")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN parent_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN subcategory_id VARCHAR(64)")
 	return nil
 }
 
@@ -567,23 +647,24 @@ func (db *DB) seed() error {
 	err = db.QueryRow("SELECT COUNT(*) FROM categories WHERE is_deleted = 0").Scan(&count)
 	if err == nil && count == 0 {
 		defaultCategories := []struct {
-			name  string
-			color string
-			icon  string
-			order int
+			name     string
+			color    string
+			icon     string
+			order    int
+			children []string
 		}{
-			{"Food & Dining", "#F57A3D", "utensils", 1},
-			{"Groceries", "#12B880", "shopping-cart", 2},
-			{"Shopping", "#5C3DF5", "shopping-bag", 3},
-			{"Transportation", "#3193F5", "car", 4},
-			{"Housing & Rent", "#F5D018", "home", 5},
-			{"Entertainment", "#F53D7A", "gamepad-2", 6},
-			{"Health & Medical", "#F53D3D", "heart-pulse", 7},
-			{"Education", "#3DF5CA", "graduation-cap", 8},
-			{"Salary & Income", "#12B880", "wallet", 9},
-			{"Investments", "#5C3DF5", "trending-up", 10},
-			{"Bills & Utilities", "#F5D018", "zap", 11},
-			{"Personal Care", "#933DF5", "smile", 12},
+			{"Food & Dining", "#F57A3D", "utensils", 1, []string{"Restaurants", "Coffee & Cafe", "Fast Food", "Snacks"}},
+			{"Groceries", "#12B880", "shopping-cart", 2, []string{"Supermarket", "Fruits & Vegetables", "Meat & Seafood"}},
+			{"Shopping", "#5C3DF5", "shopping-bag", 3, []string{"Clothing", "Electronics", "Gifts", "Home Decor"}},
+			{"Transportation", "#3193F5", "car", 4, []string{"Fuel & Gas", "Public Transit", "Taxi & Rideshare", "Maintenance"}},
+			{"Housing & Rent", "#F5D018", "home", 5, []string{"Rent", "Mortgage", "Repairs", "Furnishings"}},
+			{"Entertainment", "#F53D7A", "gamepad-2", 6, []string{"Movies & Streaming", "Games", "Concerts & Events"}},
+			{"Health & Medical", "#F53D3D", "heart-pulse", 7, []string{"Pharmacy", "Doctor & Dentist", "Fitness & Gym"}},
+			{"Education", "#3DF5CA", "graduation-cap", 8, []string{"Courses", "Books", "Tuition"}},
+			{"Salary & Income", "#12B880", "wallet", 9, []string{"Monthly Salary", "Freelance", "Bonus"}},
+			{"Investments", "#5C3DF5", "trending-up", 10, []string{"Stocks", "Crypto", "Dividends"}},
+			{"Bills & Utilities", "#F5D018", "zap", 11, []string{"Electricity", "Water", "Internet", "Mobile Phone"}},
+			{"Personal Care", "#933DF5", "smile", 12, []string{"Haircut & Salon", "Skincare", "Cosmetics"}},
 		}
 
 		for _, cat := range defaultCategories {
@@ -592,10 +673,43 @@ func (db *DB) seed() error {
 				INSERT INTO categories (id, name, color, icon, order_num)
 				VALUES (?, ?, ?, ?, ?)
 			`, id, cat.name, cat.color, cat.icon, cat.order)
+
+			for subIdx, subName := range cat.children {
+				subId := uuid.NewString()
+				_, _ = db.Exec(`
+					INSERT INTO categories (id, name, color, icon, order_num, parent_id)
+					VALUES (?, ?, ?, ?, ?, ?)
+				`, subId, subName, cat.color, cat.icon, subIdx+1, id)
+			}
 		}
 	}
 
-	// 3. Seed Sample Accounts if empty
+	// 3. Seed Default Tags if empty
+	var tagCount int
+	_ = db.QueryRow("SELECT COUNT(*) FROM tags WHERE is_deleted = 0").Scan(&tagCount)
+	if tagCount == 0 {
+		defaultTags := []struct {
+			name  string
+			color string
+			order int
+		}{
+			{"Work", "#3193F5", 1},
+			{"Personal", "#12B880", 2},
+			{"Weekend", "#F57A3D", 3},
+			{"Vacation", "#F53D7A", 4},
+			{"Tax Deductible", "#F5D018", 5},
+			{"Subscription", "#933DF5", 6},
+		}
+		for _, t := range defaultTags {
+			id := uuid.NewString()
+			_, _ = db.Exec(`
+				INSERT INTO tags (id, name, color, order_num)
+				VALUES (?, ?, ?, ?)
+			`, id, t.name, t.color, t.order)
+		}
+	}
+
+	// 4. Seed Sample Accounts if empty
 	err = db.QueryRow("SELECT COUNT(*) FROM accounts WHERE is_deleted = 0").Scan(&count)
 	if err == nil && count == 0 {
 		defaultAccounts := []struct {
@@ -624,9 +738,9 @@ func (db *DB) seed() error {
 		_ = db.QueryRow("SELECT id FROM accounts WHERE name = 'Cash Wallet'").Scan(&cashId)
 
 		var salaryCatId, foodCatId, grocCatId string
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Salary & Income'").Scan(&salaryCatId)
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Food & Dining'").Scan(&foodCatId)
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Groceries'").Scan(&grocCatId)
+		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Salary & Income' AND parent_id IS NULL").Scan(&salaryCatId)
+		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Food & Dining' AND parent_id IS NULL").Scan(&foodCatId)
+		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Groceries' AND parent_id IS NULL").Scan(&grocCatId)
 
 		now := time.Now().UTC()
 		if bankId != "" && salaryCatId != "" {
@@ -715,30 +829,65 @@ func (db *DB) UpsertCategory(c models.Category, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO categories (id, name, color, icon, order_num, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO categories (id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				name = VALUES(name),
 				color = VALUES(color),
 				icon = VALUES(icon),
 				order_num = VALUES(order_num),
+				parent_id = VALUES(parent_id),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, isDel, c.CreatedAt, now)
+		`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
 		return err
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO categories (id, name, color, icon, order_num, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO categories (id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			color = excluded.color,
 			icon = excluded.icon,
 			order_num = excluded.order_num,
+			parent_id = excluded.parent_id,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, isDel, c.CreatedAt, now)
+	`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
+	return err
+}
+
+func (db *DB) UpsertTag(t models.Tag, now time.Time) error {
+	isDel := 0
+	if t.IsDeleted {
+		isDel = 1
+	}
+
+	if db.Driver == "mariadb" {
+		_, err := db.Exec(`
+			INSERT INTO tags (id, name, color, order_num, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON DUPLICATE KEY UPDATE
+				name = VALUES(name),
+				color = VALUES(color),
+				order_num = VALUES(order_num),
+				is_deleted = VALUES(is_deleted),
+				updated_at = VALUES(updated_at)
+		`, t.ID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
+		return err
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO tags (id, name, color, order_num, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			color = excluded.color,
+			order_num = excluded.order_num,
+			is_deleted = excluded.is_deleted,
+			updated_at = excluded.updated_at
+	`, t.ID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
 	return err
 }
 
@@ -750,8 +899,8 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				account_id = VALUES(account_id),
 				type = VALUES(type),
@@ -762,16 +911,17 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 				description = VALUES(description),
 				date_time = VALUES(date_time),
 				category_id = VALUES(category_id),
+				subcategory_id = VALUES(subcategory_id),
 				due_date = VALUES(due_date),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+		`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
 		return err
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			account_id = excluded.account_id,
 			type = excluded.type,
@@ -782,9 +932,10 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 			description = excluded.description,
 			date_time = excluded.date_time,
 			category_id = excluded.category_id,
+			subcategory_id = excluded.subcategory_id,
 			due_date = excluded.due_date,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+	`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
 	return err
 }

@@ -11,6 +11,8 @@ interface CategorySelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  onlyRoot?: boolean;
+  filterParentId?: string;
 }
 
 export const CategorySelect: React.FC<CategorySelectProps> = ({
@@ -21,9 +23,21 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
   placeholder = "Select Category",
   disabled = false,
   className = "",
+  onlyRoot = false,
+  filterParentId,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const filteredCategories = categories.filter((c) => {
+    if (filterParentId) {
+      return c.parentId === filterParentId;
+    }
+    if (onlyRoot) {
+      return !c.parentId;
+    }
+    return true;
+  });
 
   const selectedCategory = categories.find((c) => c.id === value);
 
@@ -108,12 +122,12 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
       {/* Options Dropdown */}
       {isOpen && (
         <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-2xl p-1.5 space-y-1 max-h-60 overflow-y-auto backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
-          {categories.length === 0 ? (
+          {filteredCategories.length === 0 ? (
             <div className="p-3 text-center text-xs text-[var(--text-muted)]">
               No categories available
             </div>
           ) : (
-            categories.map((cat) => {
+            filteredCategories.map((cat) => {
               const isSelected = cat.id === value;
               return (
                 <button

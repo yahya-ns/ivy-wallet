@@ -69,14 +69,50 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
         </div>
 
         {/* Title & Metadata */}
-        <div className="min-w-0">
-          <p className="font-bold text-sm text-[var(--text-primary)] truncate">
-            {getTitle()}
-          </p>
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-sm text-[var(--text-primary)] truncate">
+              {getTitle()}
+            </p>
+
+            {/* Sub-category Pill Badge if exists */}
+            {transaction.subcategory && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                › {transaction.subcategory.name}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] flex-wrap">
             <span className="truncate">{transaction.account?.name || "Account"}</span>
             <span>•</span>
             <span>{formatTime(transaction.dateTime)}</span>
+
+            {/* Tag Pills */}
+            {transaction.tags && transaction.tags.length > 0 && (
+              <>
+                <span>•</span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {transaction.tags.map((tg) => (
+                    <span
+                      key={tg.id}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      style={{
+                        backgroundColor: `${tg.color}18`,
+                        color: tg.color,
+                        border: `1px solid ${tg.color}30`,
+                      }}
+                    >
+                      <span
+                        className="w-1 h-1 rounded-full shrink-0"
+                        style={{ backgroundColor: tg.color }}
+                      />
+                      <span>#{tg.name}</span>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -97,7 +133,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           {onEdit && (
             <button
               onClick={() => onEdit(transaction)}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
               title="Edit Transaction"
             >
               <Edit2 size={14} />
@@ -106,7 +142,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           {onDelete && (
             <button
               onClick={() => onDelete(transaction.id)}
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
               title="Delete Transaction"
             >
               <Trash2 size={14} />

@@ -53,6 +53,7 @@ func main() {
 	// Handlers
 	accountHandler := &handlers.AccountHandler{DB: db}
 	categoryHandler := &handlers.CategoryHandler{DB: db}
+	tagHandler := &handlers.TagHandler{DB: db}
 	txHandler := &handlers.TransactionHandler{DB: db}
 	budgetHandler := &handlers.BudgetHandler{DB: db}
 	loanHandler := &handlers.LoanHandler{DB: db}
@@ -76,6 +77,12 @@ func main() {
 		api.Post("/categories", categoryHandler.Create)
 		api.Put("/categories/{id}", categoryHandler.Update)
 		api.Delete("/categories/{id}", categoryHandler.Delete)
+
+		// Tags
+		api.Get("/tags", tagHandler.GetAll)
+		api.Post("/tags", tagHandler.Create)
+		api.Put("/tags/{id}", tagHandler.Update)
+		api.Delete("/tags/{id}", tagHandler.Delete)
 
 		// Transactions
 		api.Get("/transactions", txHandler.GetAll)

@@ -3,10 +3,10 @@ import { TransactionItem } from "@/components/transaction/TransactionItem";
 import { TransactionModal } from "@/components/transaction/TransactionModal";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
-import { Account, Category, Transaction } from "@/lib/types";
-import { formatRelativeDate, formatMoney } from "@/lib/utils";
+import { Account, Category, Tag, Transaction } from "@/lib/types";
+import { formatMoney } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Tag as TagIcon } from "lucide-react";
 
 export const TransactionsPage: React.FC = () => {
   const { currency, hideBalance, formatRelative } = useTheme();
@@ -14,12 +14,15 @@ export const TransactionsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Initialize filters from URL if present
   const queryParams = new URLSearchParams(window.location.search);
   const initialAccountId = queryParams.get("accountId") || "ALL";
   const initialCategoryId = queryParams.get("categoryId") || "ALL";
+  const initialSubcategoryId = queryParams.get("subcategoryId") || "ALL";
+  const initialTagId = queryParams.get("tagId") || "ALL";
   const initialType = queryParams.get("type") || "ALL";
 
   // Filters
@@ -27,10 +30,18 @@ export const TransactionsPage: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>(initialType);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(initialAccountId);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialCategoryId);
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>(initialSubcategoryId);
+  const [selectedTagId, setSelectedTagId] = useState<string>(initialTagId);
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
+  const rootCategories = categories.filter((c) => !c.parentId);
+  const availableSubcategories =
+    selectedCategoryId !== "ALL"
+      ? categories.filter((c) => c.parentId === selectedCategoryId)
+      : [];
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -40,22 +51,26 @@ export const TransactionsPage: React.FC = () => {
       if (selectedType !== "ALL") params.set("type", selectedType);
       if (selectedAccountId !== "ALL") params.set("accountId", selectedAccountId);
       if (selectedCategoryId !== "ALL") params.set("categoryId", selectedCategoryId);
+      if (selectedSubcategoryId !== "ALL") params.set("subcategoryId", selectedSubcategoryId);
+      if (selectedTagId !== "ALL") params.set("tagId", selectedTagId);
 
-      const [txRes, accRes, catRes] = await Promise.all([
+      const [txRes, accRes, catRes, tagRes] = await Promise.all([
         fetch(`/api/transactions?${params.toString()}`),
         fetch(`/api/accounts`),
         fetch(`/api/categories`),
+        fetch(`/api/tags`),
       ]);
 
       if (txRes.ok) setTransactions(await txRes.json());
       if (accRes.ok) setAccounts(await accRes.json());
       if (catRes.ok) setCategories(await catRes.json());
+      if (tagRes.ok) setTags(await tagRes.json());
     } catch (e) {
       console.error("Failed to fetch transactions:", e);
     } finally {
       setLoading(false);
     }
-  }, [search, selectedType, selectedAccountId, selectedCategoryId]);
+  }, [search, selectedType, selectedAccountId, selectedCategoryId, selectedSubcategoryId, selectedTagId]);
 
   useEffect(() => {
     fetchTransactions();
@@ -107,7 +122,7 @@ export const TransactionsPage: React.FC = () => {
             Transactions & Activity
           </h1>
           <p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
-            Track and search your complete financial flow.
+            Track and search your complete financial flow with sub-categories & tags.
           </p>
         </div>
 
@@ -127,7 +142,7 @@ export const TransactionsPage: React.FC = () => {
           />
           <input
             type="text"
-            placeholder="Search by title, description or note..."
+            placeholder="Search by title, note, description, or #tag..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-2xl pl-10 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-ivy-purple transition-colors"
@@ -135,7 +150,7 @@ export const TransactionsPage: React.FC = () => {
         </div>
 
         {/* Filters Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Type Filter */}
           <div>
             <label className="block text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
@@ -179,13 +194,61 @@ export const TransactionsPage: React.FC = () => {
             </label>
             <select
               value={selectedCategoryId}
-              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              onChange={(e) => {
+                setSelectedCategoryId(e.target.value);
+                setSelectedSubcategoryId("ALL");
+              }}
               className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
             >
               <option value="ALL">All Categories</option>
-              {categories.map((c) => (
+              {rootCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sub-Category Filter */}
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+              Sub-Category
+            </label>
+            <select
+              value={selectedSubcategoryId}
+              disabled={selectedCategoryId === "ALL" || availableSubcategories.length === 0}
+              onChange={(e) => setSelectedSubcategoryId(e.target.value)}
+              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="ALL">
+                {selectedCategoryId === "ALL"
+                  ? "Select Category 1st"
+                  : availableSubcategories.length === 0
+                  ? "No Sub-Categories"
+                  : "All Sub-Categories"}
+              </option>
+              {availableSubcategories.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tag Filter */}
+          <div>
+            <label className="block text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
+              Tag
+            </label>
+            <select
+              value={selectedTagId}
+              onChange={(e) => setSelectedTagId(e.target.value)}
+              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+            >
+              <option value="ALL">All Tags</option>
+              {tags.map((tg) => (
+                <option key={tg.id} value={tg.id}>
+                  #{tg.name}
                 </option>
               ))}
             </select>
@@ -268,3 +331,4 @@ export const TransactionsPage: React.FC = () => {
     </div>
   );
 };
+
