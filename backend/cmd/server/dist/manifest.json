@@ -1,16 +1,52 @@
 {
-  "name": "Ivy Wallet",
+  "name": "Ivy Wallet — Money Manager",
   "short_name": "Ivy Wallet",
-  "description": "Money manager and expense tracker web app",
+  "description": "Smart personal finance and money manager app with offline sync support",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#09090A",
   "theme_color": "#5C3DF5",
+  "categories": ["finance", "productivity", "utilities"],
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/pwa-64x64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Transactions",
+      "short_name": "Transactions",
+      "description": "View and manage transactions",
+      "url": "/transactions",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Accounts",
+      "short_name": "Accounts",
+      "description": "View your accounts and balances",
+      "url": "/accounts",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     }
   ]
 }

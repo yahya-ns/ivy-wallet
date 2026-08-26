@@ -20,6 +20,7 @@ import { cn, isNavActive } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
 import { IvyButton } from "@/components/ui/IvyButton";
+import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -83,16 +84,15 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-ivy-purple to-ivy-green flex items-center justify-center text-white font-black text-base shadow-md shadow-ivy-purple/30">
-              IV
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="Ivy Wallet Logo"
+              className="w-10 h-10 rounded-2xl object-cover"
+            />
             <div>
-              <h2 className="font-black text-base text-[var(--text-primary)] tracking-tight">
+              <h2 className="font-black text-lg text-[var(--text-primary)] tracking-tight">
                 Ivy Wallet
               </h2>
-              <span className="text-[10px] font-bold text-ivy-purple uppercase tracking-wider">
-                Web Edition
-              </span>
             </div>
           </div>
 
@@ -152,6 +152,11 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
         {/* Drawer Bottom Controls */}
         <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/50 space-y-3">
           <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-[var(--text-muted)]">Status & Sync</span>
+            <SyncStatusBadge />
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
             <span className="text-xs font-bold text-[var(--text-muted)]">Preferences</span>
             <div className="flex items-center gap-2">
               <button
@@ -161,14 +166,6 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
                 title={hideBalance ? "Reveal Balances" : "Hide Balances"}
               >
                 {hideBalance ? <EyeOff size={15} className="text-ivy-orange" /> : <Eye size={15} />}
-              </button>
-              <button
-                type="button"
-                onClick={handleSync}
-                className="p-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-ivy-green cursor-pointer"
-                title="Sync"
-              >
-                <RefreshCw size={15} />
               </button>
               <ThemeSwitch />
             </div>

@@ -4,6 +4,7 @@ import { CURRENCY_LIST, DATE_FORMAT_OPTIONS, TIME_FORMAT_OPTIONS } from "@/lib/c
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { ThemeMode } from "@/lib/types";
+import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import {
   Sun,
   Moon,
@@ -36,12 +37,23 @@ export const SettingsPage: React.FC = () => {
     formatDate,
     formatTime,
     formatDateTime,
+    formatRelative,
   } = useTheme();
+
+  const {
+    isOnline,
+    isSyncing,
+    pendingCount,
+    lastSyncTime,
+    isInstallable,
+    isInstalled,
+    syncNow,
+    installPwa,
+  } = useNetworkStatus();
 
   const [walletName, setWalletName] = useState("My Ivy Wallet");
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -67,21 +79,16 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleManualSync = async () => {
-    setSyncing(true);
-    setSyncStatus("Connecting to Ivy Cloud Server...");
+    setSyncStatus("Connecting to Ivy Server and synchronizing deltas...");
     try {
-      const res = await fetch("/api/sync");
-      if (res.ok) {
-        const data = await res.json();
-        setSyncStatus(`Sync successful! ${data.transactions?.length || 0} transactions updated.`);
-        window.dispatchEvent(new CustomEvent("ivy-data-updated"));
+      const success = await syncNow();
+      if (success) {
+        setSyncStatus("Sync completed successfully! Local database and cloud are in sync.");
       } else {
-        setSyncStatus("Sync failed. Check connection.");
+        setSyncStatus("Sync could not complete. Check network or server status.");
       }
     } catch {
-      setSyncStatus("Sync server unreachable.");
-    } finally {
-      setSyncing(false);
+      setSyncStatus("Sync failed unexpectedly.");
     }
   };
 
@@ -349,32 +356,99 @@ export const SettingsPage: React.FC = () => {
         </div>
       </IvyCard>
 
-      {/* Cloud Sync & Self-Host Integration */}
-      <IvyCard className="p-6 space-y-4 border-ivy-purple/30 bg-gradient-to-br from-ivy-purple/5 to-transparent">
-        <div className="flex items-center justify-between">
+      {/* PWA App Installation & Offline Auto-Sync Hub */}
+      <IvyCard className="p-6 space-y-5 border-ivy-purple/30 bg-gradient-to-br from-ivy-purple/10 via-ivy-purple/5 to-transparent">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-ivy-purple text-white flex items-center justify-center shadow-md shadow-ivy-purple/20">
-              <Server size={20} />
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="Ivy Logo"
+              className="w-12 h-12 rounded-2xl object-cover"
+            />
             <div>
-              <h3 className="text-base font-bold text-[var(--text-primary)]">
-                Mobile & Multi-Device Cloud Sync
-              </h3>
-              <p className="text-xs text-[var(--text-muted)]">
-                REST Endpoint: <code className="text-ivy-purple font-mono">/api/sync</code>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  PWA & Offline Auto-Sync
+                </h3>
+                <span className="text-[10px] bg-ivy-purple/20 text-ivy-purple font-bold px-2 py-0.5 rounded-full border border-ivy-purple/30">
+                  Concept 4 Active
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Work 100% offline with IndexedDB local storage & automatic background cloud sync.
               </p>
             </div>
           </div>
 
-          <IvyButton
-            onClick={handleManualSync}
-            disabled={syncing}
-            variant="secondary"
-            size="sm"
-          >
-            <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-            <span>{syncing ? "Syncing..." : "Sync Now"}</span>
-          </IvyButton>
+          <div className="flex items-center gap-2">
+            {isInstallable && (
+              <IvyButton
+                onClick={installPwa}
+                variant="primary"
+                size="sm"
+                className="shadow-md shadow-ivy-purple/30"
+              >
+                <Download size={14} className="stroke-[2.5]" />
+                <span>Install App</span>
+              </IvyButton>
+            )}
+            <IvyButton
+              onClick={handleManualSync}
+              disabled={isSyncing || !isOnline}
+              variant="secondary"
+              size="sm"
+            >
+              <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
+              <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>
+            </IvyButton>
+          </div>
+        </div>
+
+        {/* Status Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
+                Network Status
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+                  }`}
+                />
+                <p className="text-xs font-bold text-[var(--text-primary)]">
+                  {isOnline ? "Online & Connected" : "Offline Mode"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
+                Offline Outbox
+              </span>
+              <p className="text-xs font-bold text-[var(--text-primary)] mt-0.5">
+                {pendingCount > 0 ? (
+                  <span className="text-amber-400 font-bold">{pendingCount} mutations pending</span>
+                ) : (
+                  <span className="text-emerald-400">All changes synced</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)] flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
+                Last Cloud Sync
+              </span>
+              <p className="text-xs font-bold text-[var(--text-primary)] mt-0.5 truncate">
+                {lastSyncTime ? formatRelative(new Date(lastSyncTime)) : "Synced with local session"}
+              </p>
+            </div>
+          </div>
         </div>
 
         {syncStatus && (
@@ -384,10 +458,10 @@ export const SettingsPage: React.FC = () => {
           </div>
         )}
 
-        <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-          Your Ivy Wallet instance is self-hosted, lightweight (~15MB RAM), and provides automatic
-          delta synchronization for mobile clients with offline support.
-        </p>
+        <div className="text-xs text-[var(--text-muted)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-[var(--border-subtle)]">
+          <span>Storage Engine: <strong>IndexedDB (idb)</strong> + Service Worker Cache</span>
+          <span>App State: <strong>{isInstalled ? "Installed (Standalone PWA)" : "Web App (Installable)"}</strong></span>
+        </div>
       </IvyCard>
 
       {/* Backup & Export / Import */}

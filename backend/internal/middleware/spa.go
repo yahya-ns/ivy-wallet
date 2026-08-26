@@ -28,6 +28,15 @@ func SPAHandler(staticFS fs.FS) http.HandlerFunc {
 		f, err := staticFS.Open(path)
 		if err == nil {
 			_ = f.Close()
+
+			// Special headers for Service Worker and manifest files
+			if path == "sw.js" || path == "registerSW.js" {
+				w.Header().Set("Service-Worker-Allowed", "/")
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			} else if path == "manifest.webmanifest" || path == "manifest.json" {
+				w.Header().Set("Content-Type", "application/manifest+json")
+			}
+
 			fileServer.ServeHTTP(w, r)
 			return
 		}

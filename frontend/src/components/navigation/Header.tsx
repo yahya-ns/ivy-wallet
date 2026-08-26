@@ -1,8 +1,9 @@
 import React from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
-import { Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, Plus } from "lucide-react";
 import { IvyButton } from "@/components/ui/IvyButton";
+import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
 
 interface HeaderProps {
   onQuickAdd: () => void;
@@ -12,21 +13,13 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onQuickAdd }) => {
   const { hideBalance, toggleHideBalance } = useTheme();
 
-  const handleSync = async () => {
-    try {
-      const res = await fetch("/api/sync");
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("ivy-data-updated"));
-      }
-    } catch {}
-  };
-
   return (
     <header className="hidden md:flex sticky top-0 z-30 items-center justify-between px-6 lg:px-8 py-3.5 bg-[var(--bg-main)]/80 backdrop-blur-md border-b border-[var(--border-subtle)]">
-      <div>
+      <div className="flex items-center gap-3">
         <span className="text-xs font-semibold text-[var(--text-muted)]">
           Personal Money Management & Budgeting
         </span>
+        <SyncStatusBadge />
       </div>
 
       {/* Action buttons on the right */}
@@ -39,16 +32,6 @@ export const Header: React.FC<HeaderProps> = ({ onQuickAdd }) => {
           aria-label={hideBalance ? "Reveal Balances" : "Hide Balances"}
         >
           {hideBalance ? <EyeOff size={16} className="text-ivy-orange" /> : <Eye size={16} />}
-        </button>
-
-        {/* Sync Button */}
-        <button
-          onClick={handleSync}
-          className="p-2 rounded-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-ivy-green hover:border-ivy-green/50 transition-all cursor-pointer shadow-sm"
-          title="Sync Cloud / Check Updates"
-          aria-label="Sync Cloud / Check Updates"
-        >
-          <RefreshCw size={16} />
         </button>
 
         {/* Theme Switcher */}

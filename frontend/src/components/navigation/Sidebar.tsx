@@ -32,16 +32,15 @@ export const Sidebar: React.FC = () => {
     <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 border-r border-[var(--border-color)] bg-[var(--bg-surface)] p-4 z-40 select-none">
       {/* Brand Logo */}
       <div className="flex items-center gap-3 px-3 py-4 mb-4">
-        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-ivy-purple to-ivy-green flex items-center justify-center text-white font-black text-lg shadow-lg shadow-ivy-purple/25">
-          IV
-        </div>
+        <img
+          src="/pwa-192x192.png"
+          alt="Ivy Wallet Logo"
+          className="w-10 h-10 rounded-2xl object-cover"
+        />
         <div>
-          <h1 className="font-extrabold text-base text-[var(--text-primary)] tracking-tight">
+          <h1 className="font-extrabold text-lg text-[var(--text-primary)] tracking-tight">
             Ivy Wallet
           </h1>
-          <span className="text-[10px] font-bold text-ivy-purple uppercase tracking-wider">
-            Web Edition
-          </span>
         </div>
       </div>
 
