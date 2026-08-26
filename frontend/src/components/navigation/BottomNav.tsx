@@ -2,8 +2,8 @@ import React from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
-  Wallet,
-  Tags,
+  ArrowLeftRight,
+  Target,
   Plus,
   Menu,
 } from "lucide-react";
@@ -19,25 +19,27 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMe
 
   const navItems = [
     { href: "/", label: "Home", icon: LayoutDashboard },
-    { href: "/accounts", label: "Accounts", icon: Wallet },
-    { isAction: true, label: "Add", icon: Plus, onClick: onQuickAdd },
-    { href: "/categories", label: "Categories", icon: Tags },
+    { href: "/transactions", label: "Transaction", icon: ArrowLeftRight },
+    { isAction: true, label: "New Transaction", icon: Plus, onClick: onQuickAdd },
+    { href: "/budgets", label: "Budget", icon: Target },
     { isMenu: true, label: "Menu", icon: Menu, onClick: onOpenMobileMenu },
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-surface)]/90 backdrop-blur-lg border-t border-[var(--border-color)] px-2 py-1.5 safe-pb">
-      <div className="flex items-center justify-around">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-color)] px-2 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] shadow-lg shadow-black/5">
+      <div className="flex items-center justify-around max-w-md mx-auto">
         {navItems.map((item, index) => {
           if (item.isAction) {
             return (
               <button
                 key={index}
+                type="button"
                 onClick={item.onClick}
-                className="w-12 h-12 rounded-full bg-ivy-purple text-white flex items-center justify-center -translate-y-3 shadow-lg shadow-ivy-purple/40 active:scale-95 transition-transform cursor-pointer"
+                className="w-14 h-14 rounded-full bg-ivy-purple text-white flex items-center justify-center -translate-y-4 shadow-xl shadow-ivy-purple/45 ring-4 ring-[var(--bg-surface)] active:scale-90 hover:scale-105 transition-all duration-200 cursor-pointer"
                 title="Quick Add Transaction"
+                aria-label="Add Transaction"
               >
-                <Plus size={24} className="stroke-[2.5]" />
+                <Plus size={28} className="stroke-[2.5]" />
               </button>
             );
           }
@@ -49,11 +51,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMe
                 key={index}
                 type="button"
                 onClick={item.onClick}
-                className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] active:text-ivy-purple transition-colors cursor-pointer"
-                title="All Navigation Menu"
+                className="flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] active:text-ivy-purple transition-colors cursor-pointer"
+                title="Open Navigation Menu"
+                aria-label="Open Navigation Menu"
               >
-                <Icon size={20} className="stroke-[2.2]" />
-                <span className="mt-1">{item.label}</span>
+                <Icon size={20} className="stroke-[2]" />
+                <span className="mt-0.5">{item.label}</span>
               </button>
             );
           }
@@ -66,19 +69,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMe
               key={item.href}
               href={item.href!}
               className={cn(
-                "flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10px] font-bold transition-colors cursor-pointer",
+                "flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-semibold transition-colors cursor-pointer",
                 isActive
-                  ? "text-ivy-purple"
+                  ? "text-ivy-purple font-bold"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               )}
             >
-              <Icon size={20} className={isActive ? "text-ivy-purple stroke-[2.5]" : "text-[var(--text-muted)]"} />
-              <span className="mt-1">{item.label}</span>
+              <Icon
+                size={20}
+                className={isActive ? "text-ivy-purple stroke-[2.5]" : "text-[var(--text-muted)] stroke-[2]"}
+              />
+              <span className="mt-0.5">{item.label}</span>
             </Link>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 };
+
 

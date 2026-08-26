@@ -41,12 +41,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        <Header
-          onQuickAdd={() => setIsQuickAddOpen(true)}
-          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-        />
+        <Header onQuickAdd={() => setIsQuickAddOpen(true)} />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-20 md:pb-12">
           {children}
         </main>
 
