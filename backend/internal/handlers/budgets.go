@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -19,11 +20,14 @@ type BudgetHandler struct {
 }
 
 func (h *BudgetHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	rows, err := h.DB.Query(`
-		SELECT id, name, amount, category_ids, account_ids, period, order_id, created_at, updated_at
+		SELECT id, user_id, name, amount, category_ids, account_ids, period, order_id, created_at, updated_at
 		FROM budgets
+		WHERE user_id = ?
 		ORDER BY order_id ASC
-	`)
+	`, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -38,7 +42,7 @@ func (h *BudgetHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var b models.Budget
 		var catIDs, accIDs sql.NullString
-		if err := rows.Scan(&b.ID, &b.Name, &b.Amount, &catIDs, &accIDs, &b.Period, &b.OrderId, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.UserID, &b.Name, &b.Amount, &catIDs, &accIDs, &b.Period, &b.OrderId, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -50,7 +54,7 @@ func (h *BudgetHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 			b.AccountIds = &accIDs.String
 		}
 
-		// Calculate spent amount for current month
+		// Calculate spent amount for current month for this user
 		var categoryList []string
 		if b.CategoryIds != nil && *b.CategoryIds != "" {
 			_ = json.Unmarshal([]byte(*b.CategoryIds), &categoryList)
@@ -59,8 +63,8 @@ func (h *BudgetHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		query := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
-		args := []interface{}{startOfMonth, endOfMonth}
+		query := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ? AND type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
+		args := []interface{}{userID, startOfMonth, endOfMonth}
 
 		if len(categoryList) > 0 {
 			placeholders := make([]string, len(categoryList))
@@ -81,10 +85,12 @@ func (h *BudgetHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(budgets)
+	_ = json.NewEncoder(w).Encode(budgets)
 }
 
 func (h *BudgetHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var input struct {
 		Name        string      `json:"name"`
 		Amount      float64     `json:"amount"`
@@ -111,15 +117,15 @@ func (h *BudgetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var count int
-	_ = h.DB.QueryRow("SELECT COUNT(*) FROM budgets").Scan(&count)
+	_ = h.DB.QueryRow("SELECT COUNT(*) FROM budgets WHERE user_id = ?", userID).Scan(&count)
 
 	id := uuid.NewString()
 	now := time.Now().UTC()
 
 	_, err := h.DB.Exec(`
-		INSERT INTO budgets (id, name, amount, category_ids, period, order_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, input.Name, input.Amount, catJSON, input.Period, count+1, now, now)
+		INSERT INTO budgets (id, user_id, name, amount, category_ids, period, order_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, userID, input.Name, input.Amount, catJSON, input.Period, count+1, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -128,6 +134,7 @@ func (h *BudgetHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	b := models.Budget{
 		ID:          id,
+		UserID:      userID,
 		Name:        input.Name,
 		Amount:      input.Amount,
 		CategoryIds: catJSON,
@@ -139,10 +146,11 @@ func (h *BudgetHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(b)
+	_ = json.NewEncoder(w).Encode(b)
 }
 
 func (h *BudgetHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var input struct {
 		Name        *string     `json:"name"`
@@ -164,8 +172,8 @@ func (h *BudgetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var catIDs sql.NullString
 
 	err := h.DB.QueryRow(`
-		SELECT name, amount, category_ids, period, order_id FROM budgets WHERE id = ?
-	`, id).Scan(&name, &amount, &catIDs, &period, &orderId)
+		SELECT name, amount, category_ids, period, order_id FROM budgets WHERE id = ? AND user_id = ?
+	`, id, userID).Scan(&name, &amount, &catIDs, &period, &orderId)
 
 	if err != nil {
 		http.Error(w, "Budget not found", http.StatusNotFound)
@@ -198,8 +206,8 @@ func (h *BudgetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	_, err = h.DB.Exec(`
 		UPDATE budgets
 		SET name = ?, amount = ?, category_ids = ?, period = ?, order_id = ?, updated_at = ?
-		WHERE id = ?
-	`, name, amount, catJSON, period, orderId, now, id)
+		WHERE id = ? AND user_id = ?
+	`, name, amount, catJSON, period, orderId, now, id, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -207,8 +215,9 @@ func (h *BudgetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":          id,
+		"userId":      userID,
 		"name":        name,
 		"amount":      amount,
 		"categoryIds": catJSON,
@@ -219,12 +228,13 @@ func (h *BudgetHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BudgetHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
-	_, err := h.DB.Exec("DELETE FROM budgets WHERE id = ?", id)
+	_, err := h.DB.Exec("DELETE FROM budgets WHERE id = ? AND user_id = ?", id, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

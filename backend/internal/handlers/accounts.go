@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -18,12 +19,14 @@ type AccountHandler struct {
 }
 
 func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	rows, err := h.DB.Query(`
-		SELECT id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at
+		SELECT id, user_id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at
 		FROM accounts
-		WHERE is_deleted = 0
+		WHERE user_id = ? AND is_deleted = 0
 		ORDER BY order_num ASC
-	`)
+	`, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -34,7 +37,7 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a models.Account
 		var incInBal, isDel int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &isDel, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &isDel, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -44,8 +47,8 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		// Calculate live balances & stats
 		// 1. Transactions directly from this account
 		txRows, err := h.DB.Query(`
-			SELECT type, amount FROM transactions WHERE account_id = ? AND is_deleted = 0
-		`, a.ID)
+			SELECT type, amount FROM transactions WHERE user_id = ? AND account_id = ? AND is_deleted = 0
+		`, userID, a.ID)
 		if err == nil {
 			for txRows.Next() {
 				var txType string
@@ -66,8 +69,8 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 		// 2. Incoming transfers to this account
 		toRows, err := h.DB.Query(`
-			SELECT amount, to_amount FROM transactions WHERE to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
-		`, a.ID)
+			SELECT amount, to_amount FROM transactions WHERE user_id = ? AND to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
+		`, userID, a.ID)
 		if err == nil {
 			for toRows.Next() {
 				var amount float64
@@ -86,19 +89,20 @@ func (h *AccountHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(accounts)
+	_ = json.NewEncoder(w).Encode(accounts)
 }
 
 func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var a models.Account
 	var incInBal, isDel int
 
 	err := h.DB.QueryRow(`
-		SELECT id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at
+		SELECT id, user_id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at
 		FROM accounts
-		WHERE id = ? AND is_deleted = 0
-	`, id).Scan(&a.ID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &isDel, &a.CreatedAt, &a.UpdatedAt)
+		WHERE id = ? AND user_id = ? AND is_deleted = 0
+	`, id, userID).Scan(&a.ID, &a.UserID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &isDel, &a.CreatedAt, &a.UpdatedAt)
 
 	if err != nil {
 		http.Error(w, "Account not found", http.StatusNotFound)
@@ -110,8 +114,8 @@ func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	// Calculate live balances & stats
 	// 1. Transactions directly from this account
 	txRows, err := h.DB.Query(`
-		SELECT type, amount FROM transactions WHERE account_id = ? AND is_deleted = 0
-	`, a.ID)
+		SELECT type, amount FROM transactions WHERE user_id = ? AND account_id = ? AND is_deleted = 0
+	`, userID, a.ID)
 	if err == nil {
 		for txRows.Next() {
 			var txType string
@@ -132,8 +136,8 @@ func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Incoming transfers to this account
 	toRows, err := h.DB.Query(`
-		SELECT amount, to_amount FROM transactions WHERE to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
-	`, a.ID)
+		SELECT amount, to_amount FROM transactions WHERE user_id = ? AND to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
+	`, userID, a.ID)
 	if err == nil {
 		for toRows.Next() {
 			var amount float64
@@ -149,10 +153,12 @@ func (h *AccountHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(a)
+	_ = json.NewEncoder(w).Encode(a)
 }
 
 func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var input struct {
 		Name             string   `json:"name"`
 		Currency         string   `json:"currency"`
@@ -183,15 +189,15 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var count int
-	_ = h.DB.QueryRow("SELECT COUNT(*) FROM accounts WHERE is_deleted = 0").Scan(&count)
+	_ = h.DB.QueryRow("SELECT COUNT(*) FROM accounts WHERE user_id = ? AND is_deleted = 0", userID).Scan(&count)
 
 	id := uuid.NewString()
 	now := time.Now().UTC()
 
 	_, err := h.DB.Exec(`
-		INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, input.Name, input.Currency, input.Color, input.Icon, count+1, incInBal, now, now)
+		INSERT INTO accounts (id, user_id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, userID, input.Name, input.Currency, input.Color, input.Icon, count+1, incInBal, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -208,13 +214,14 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, _ = h.DB.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, title, date_time, created_at, updated_at)
-			VALUES (?, ?, ?, ?, 'Initial Balance', ?, ?, ?)
-		`, uuid.NewString(), id, txType, amt, now, now, now)
+			INSERT INTO transactions (id, user_id, account_id, type, amount, title, date_time, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 'Initial Balance', ?, ?, ?)
+		`, uuid.NewString(), userID, id, txType, amt, now, now, now)
 	}
 
 	a := models.Account{
 		ID:               id,
+		UserID:           userID,
 		Name:             input.Name,
 		Currency:         input.Currency,
 		Color:            input.Color,
@@ -227,10 +234,11 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(a)
+	_ = json.NewEncoder(w).Encode(a)
 }
 
 func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var input struct {
 		Name             *string  `json:"name"`
@@ -253,8 +261,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	err := h.DB.QueryRow(`
 		SELECT name, currency, color, icon, order_num, include_in_balance
-		FROM accounts WHERE id = ?
-	`, id).Scan(&name, &curr, &color, &icon, &orderNum, &incInBal)
+		FROM accounts WHERE id = ? AND user_id = ? AND is_deleted = 0
+	`, id, userID).Scan(&name, &curr, &color, &icon, &orderNum, &incInBal)
 
 	if err != nil {
 		http.Error(w, "Account not found", http.StatusNotFound)
@@ -287,8 +295,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	_, err = h.DB.Exec(`
 		UPDATE accounts
 		SET name = ?, currency = ?, color = ?, icon = ?, order_num = ?, include_in_balance = ?, updated_at = ?
-		WHERE id = ?
-	`, name, curr, color, icon, orderNum, incInBal, now, id)
+		WHERE id = ? AND user_id = ?
+	`, name, curr, color, icon, orderNum, incInBal, now, id, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -300,8 +308,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		var currentBalance float64
 		// 1. Transactions directly from this account
 		txRows, err := h.DB.Query(`
-			SELECT type, amount FROM transactions WHERE account_id = ? AND is_deleted = 0
-		`, id)
+			SELECT type, amount FROM transactions WHERE user_id = ? AND account_id = ? AND is_deleted = 0
+		`, userID, id)
 		if err == nil {
 			for txRows.Next() {
 				var txType string
@@ -318,8 +326,8 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 		// 2. Incoming transfers to this account
 		toRows, err := h.DB.Query(`
-			SELECT amount, to_amount FROM transactions WHERE to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
-		`, id)
+			SELECT amount, to_amount FROM transactions WHERE user_id = ? AND to_account_id = ? AND type = 'TRANSFER' AND is_deleted = 0
+		`, userID, id)
 		if err == nil {
 			for toRows.Next() {
 				var amount float64
@@ -344,15 +352,16 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 
 			_, _ = h.DB.Exec(`
-				INSERT INTO transactions (id, account_id, type, amount, title, date_time, created_at, updated_at)
-				VALUES (?, ?, ?, ?, 'Balance Adjustment', ?, ?, ?)
-			`, uuid.NewString(), id, txType, amt, now, now, now)
+				INSERT INTO transactions (id, user_id, account_id, type, amount, title, date_time, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, 'Balance Adjustment', ?, ?, ?)
+			`, uuid.NewString(), userID, id, txType, amt, now, now, now)
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":               id,
+		"userId":           userID,
 		"name":             name,
 		"currency":         curr,
 		"color":            color,
@@ -364,12 +373,13 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	now := time.Now().UTC()
 
 	_, err := h.DB.Exec(`
-		UPDATE accounts SET is_deleted = 1, updated_at = ? WHERE id = ?
-	`, now, id)
+		UPDATE accounts SET is_deleted = 1, updated_at = ? WHERE id = ? AND user_id = ?
+	`, now, id, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -377,5 +387,5 @@ func (h *AccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -17,6 +18,8 @@ type ReportHandler struct {
 }
 
 func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	q := r.URL.Query()
 	monthsStr := q.Get("months")
 	monthsBack := 6
@@ -32,9 +35,9 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 	// 1. Current Month Totals (Income vs Expense)
 	var totalMonthIncome, totalMonthExpense float64
 
-	incomeQuery := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'INCOME' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
-	expenseQuery := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
-	args := []interface{}{startOfCurrentMonth, endOfCurrentMonth}
+	incomeQuery := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ? AND type = 'INCOME' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
+	expenseQuery := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ? AND type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
+	args := []interface{}{userID, startOfCurrentMonth, endOfCurrentMonth}
 
 	if accountID != "" {
 		incomeQuery += " AND account_id = ?"
@@ -60,9 +63,9 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 		       SUM(t.amount) as total_amount
 		FROM transactions t
 		LEFT JOIN categories c ON t.category_id = c.id
-		WHERE t.type = 'EXPENSE' AND t.is_deleted = 0 AND t.date_time >= ? AND t.date_time <= ?
+		WHERE t.user_id = ? AND t.type = 'EXPENSE' AND t.is_deleted = 0 AND t.date_time >= ? AND t.date_time <= ?
 	`
-	catArgs := []interface{}{startOfCurrentMonth, endOfCurrentMonth}
+	catArgs := []interface{}{userID, startOfCurrentMonth, endOfCurrentMonth}
 	if accountID != "" {
 		catQuery += " AND t.account_id = ?"
 		catArgs = append(catArgs, accountID)
@@ -97,9 +100,9 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 		label := mStart.Format("Jan 2006")
 
 		var inc, exp float64
-		mArgs := []interface{}{mStart, mEnd}
-		mIncQ := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'INCOME' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
-		mExpQ := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
+		mArgs := []interface{}{userID, mStart, mEnd}
+		mIncQ := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ? AND type = 'INCOME' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
+		mExpQ := `SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE user_id = ? AND type = 'EXPENSE' AND is_deleted = 0 AND date_time >= ? AND date_time <= ?`
 
 		if accountID != "" {
 			mIncQ += " AND account_id = ?"
@@ -128,5 +131,5 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/auth"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/config"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/handlers"
@@ -25,12 +26,20 @@ func main() {
 	cfg := config.Load()
 	log.Printf("Starting Ivy Wallet Web Edition...")
 	log.Printf("Database engine: %s", cfg.DB.Type)
+	log.Printf("Authentication enabled: %v (OIDC: %v)", cfg.Auth.Enabled, cfg.Auth.OIDCEnabled)
 
 	db, err := database.Connect(cfg.DB)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
+
+	// Initialize Token Manager & OIDC Client
+	tokenMgr := auth.NewTokenManager(cfg.Auth.JWTSecret, cfg.Auth.SessionCookie)
+	oidcClient, err := auth.NewOIDCClient(cfg.Auth)
+	if err != nil {
+		log.Printf("Notice: OIDC client setup message: %v", err)
+	}
 
 	r := chi.NewRouter()
 
@@ -51,6 +60,7 @@ func main() {
 	}))
 
 	// Handlers
+	authHandler := handlers.NewAuthHandler(db, cfg.Auth, cfg.AppURL, tokenMgr, oidcClient)
 	accountHandler := &handlers.AccountHandler{DB: db}
 	categoryHandler := &handlers.CategoryHandler{DB: db}
 	tagHandler := &handlers.TagHandler{DB: db}
@@ -65,66 +75,85 @@ func main() {
 
 	// API Routes
 	r.Route("/api", func(api chi.Router) {
-		// Accounts
-		api.Get("/accounts", accountHandler.GetAll)
-		api.Get("/accounts/{id}", accountHandler.GetByID)
-		api.Post("/accounts", accountHandler.Create)
-		api.Put("/accounts/{id}", accountHandler.Update)
-		api.Delete("/accounts/{id}", accountHandler.Delete)
+		// Public Auth Routes
+		api.Route("/auth", func(authRoute chi.Router) {
+			authRoute.Get("/config", authHandler.GetConfig)
+			authRoute.Get("/oidc/login", authHandler.OIDCLogin)
+			authRoute.Get("/oidc/callback", authHandler.OIDCCallback)
+			authRoute.Post("/login/local", authHandler.LocalLogin)
+			authRoute.Post("/dev-login", authHandler.DevLogin)
+			authRoute.Get("/me", authHandler.Me)
+			authRoute.Post("/logout", authHandler.Logout)
+		})
 
-		// Categories
-		api.Get("/categories", categoryHandler.GetAll)
-		api.Get("/categories/{id}", categoryHandler.GetByID)
-		api.Post("/categories", categoryHandler.Create)
-		api.Put("/categories/{id}", categoryHandler.Update)
-		api.Delete("/categories/{id}", categoryHandler.Delete)
+		// Protected Routes Group
+		api.Group(func(protected chi.Router) {
+			protected.Use(middleware.AuthMiddleware(tokenMgr, cfg.Auth.Enabled, db))
 
-		// Tags
-		api.Get("/tags", tagHandler.GetAll)
-		api.Get("/tags/{id}", tagHandler.GetByID)
-		api.Post("/tags", tagHandler.Create)
-		api.Put("/tags/{id}", tagHandler.Update)
-		api.Delete("/tags/{id}", tagHandler.Delete)
+			// Auth User Update
+			protected.Patch("/auth/me", authHandler.UpdateMe)
 
-		// Transactions
-		api.Get("/transactions", txHandler.GetAll)
-		api.Post("/transactions", txHandler.Create)
-		api.Put("/transactions/{id}", txHandler.Update)
-		api.Delete("/transactions/{id}", txHandler.Delete)
+			// Accounts
+			protected.Get("/accounts", accountHandler.GetAll)
+			protected.Get("/accounts/{id}", accountHandler.GetByID)
+			protected.Post("/accounts", accountHandler.Create)
+			protected.Put("/accounts/{id}", accountHandler.Update)
+			protected.Delete("/accounts/{id}", accountHandler.Delete)
 
-		// Budgets
-		api.Get("/budgets", budgetHandler.GetAll)
-		api.Post("/budgets", budgetHandler.Create)
-		api.Put("/budgets/{id}", budgetHandler.Update)
-		api.Delete("/budgets/{id}", budgetHandler.Delete)
+			// Categories
+			protected.Get("/categories", categoryHandler.GetAll)
+			protected.Get("/categories/{id}", categoryHandler.GetByID)
+			protected.Post("/categories", categoryHandler.Create)
+			protected.Put("/categories/{id}", categoryHandler.Update)
+			protected.Delete("/categories/{id}", categoryHandler.Delete)
 
-		// Loans & Debts
-		api.Get("/loans", loanHandler.GetAll)
-		api.Post("/loans", loanHandler.Create)
-		api.Put("/loans/{id}", loanHandler.Update)
-		api.Delete("/loans/{id}", loanHandler.Delete)
-		api.Post("/loans/{id}/records", loanHandler.AddRepayment)
+			// Tags
+			protected.Get("/tags", tagHandler.GetAll)
+			protected.Get("/tags/{id}", tagHandler.GetByID)
+			protected.Post("/tags", tagHandler.Create)
+			protected.Put("/tags/{id}", tagHandler.Update)
+			protected.Delete("/tags/{id}", tagHandler.Delete)
 
-		// Planned & Subscriptions
-		api.Get("/planned", plannedHandler.GetAll)
-		api.Post("/planned", plannedHandler.Create)
-		api.Put("/planned/{id}", plannedHandler.Update)
-		api.Delete("/planned/{id}", plannedHandler.Delete)
+			// Transactions
+			protected.Get("/transactions", txHandler.GetAll)
+			protected.Post("/transactions", txHandler.Create)
+			protected.Put("/transactions/{id}", txHandler.Update)
+			protected.Delete("/transactions/{id}", txHandler.Delete)
 
-		// Reports & Trends
-		api.Get("/reports", reportHandler.GetReports)
+			// Budgets
+			protected.Get("/budgets", budgetHandler.GetAll)
+			protected.Post("/budgets", budgetHandler.Create)
+			protected.Put("/budgets/{id}", budgetHandler.Update)
+			protected.Delete("/budgets/{id}", budgetHandler.Delete)
 
-		// Settings & Preferences
-		api.Get("/settings", settingsHandler.Get)
-		api.Patch("/settings", settingsHandler.Update)
+			// Loans & Debts
+			protected.Get("/loans", loanHandler.GetAll)
+			protected.Post("/loans", loanHandler.Create)
+			protected.Put("/loans/{id}", loanHandler.Update)
+			protected.Delete("/loans/{id}", loanHandler.Delete)
+			protected.Post("/loans/{id}/records", loanHandler.AddRepayment)
 
-		// Backup & Restore
-		api.Get("/backup", backupHandler.Export)
-		api.Post("/backup", backupHandler.Import)
+			// Planned & Subscriptions
+			protected.Get("/planned", plannedHandler.GetAll)
+			protected.Post("/planned", plannedHandler.Create)
+			protected.Put("/planned/{id}", plannedHandler.Update)
+			protected.Delete("/planned/{id}", plannedHandler.Delete)
 
-		// Cloud Sync for Multi-Device & Mobile Apps
-		api.Get("/sync", syncHandler.PullSync)
-		api.Post("/sync", syncHandler.PushSync)
+			// Reports & Trends
+			protected.Get("/reports", reportHandler.GetReports)
+
+			// Settings & Preferences
+			protected.Get("/settings", settingsHandler.Get)
+			protected.Patch("/settings", settingsHandler.Update)
+
+			// Backup & Restore
+			protected.Get("/backup", backupHandler.Export)
+			protected.Post("/backup", backupHandler.Import)
+
+			// Cloud Sync for Multi-Device & Mobile Apps
+			protected.Get("/sync", syncHandler.PullSync)
+			protected.Post("/sync", syncHandler.PushSync)
+		})
 	})
 
 	// Static SPA Files

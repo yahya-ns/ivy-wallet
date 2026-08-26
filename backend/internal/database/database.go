@@ -17,6 +17,8 @@ import (
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
+const DefaultUserID = "default-user"
+
 type DB struct {
 	*sql.DB
 	Driver string // "sqlite", "postgres", "mariadb"
@@ -71,7 +73,7 @@ func Connect(cfg config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("migration failed for %s: %w", cfg.Type, err)
 	}
 
-	if err := dbWrapper.seed(); err != nil {
+	if err := dbWrapper.seedDefault(); err != nil {
 		log.Printf("Warning: seed failed: %v", err)
 	}
 
@@ -122,20 +124,40 @@ func (db *DB) Exec(query string, args ...any) (sql.Result, error) {
 }
 
 func (db *DB) migrate() error {
+	var err error
 	switch db.Driver {
 	case "postgres":
-		return db.migratePostgres()
+		err = db.migratePostgres()
 	case "mariadb":
-		return db.migrateMariaDB()
+		err = db.migrateMariaDB()
 	default:
-		return db.migrateSQLite()
+		err = db.migrateSQLite()
 	}
+	if err != nil {
+		return err
+	}
+
+	// Run common multi-user data migration
+	return db.migrateMultiUserData()
 }
 
 func (db *DB) migrateSQLite() error {
 	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		email TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		avatar_url TEXT,
+		provider TEXT NOT NULL DEFAULT 'local',
+		subject TEXT,
+		role TEXT NOT NULL DEFAULT 'user',
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS settings (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		theme TEXT NOT NULL DEFAULT 'DARK',
 		currency TEXT NOT NULL DEFAULT 'USD',
 		buffer_amount REAL NOT NULL DEFAULT 0.0,
@@ -150,6 +172,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS accounts (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		name TEXT NOT NULL,
 		currency TEXT NOT NULL DEFAULT 'USD',
 		color TEXT NOT NULL DEFAULT '#5C3DF5',
@@ -163,6 +186,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS categories (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		name TEXT NOT NULL,
 		color TEXT NOT NULL DEFAULT '#12B880',
 		icon TEXT NOT NULL DEFAULT 'tag',
@@ -176,7 +200,8 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS tags (
 		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL UNIQUE,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
+		name TEXT NOT NULL,
 		color TEXT NOT NULL DEFAULT '#5C3DF5',
 		order_num INTEGER NOT NULL DEFAULT 0,
 		is_deleted INTEGER NOT NULL DEFAULT 0,
@@ -186,6 +211,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS transactions (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		account_id TEXT NOT NULL,
 		type TEXT NOT NULL,
 		amount REAL NOT NULL,
@@ -219,6 +245,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS budgets (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		name TEXT NOT NULL,
 		amount REAL NOT NULL,
 		category_ids TEXT,
@@ -231,6 +258,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS loans (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		name TEXT NOT NULL,
 		amount REAL NOT NULL,
 		type TEXT NOT NULL,
@@ -249,6 +277,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS loan_records (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		loan_id TEXT NOT NULL,
 		amount REAL NOT NULL,
 		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -264,6 +293,7 @@ func (db *DB) migrateSQLite() error {
 
 	CREATE TABLE IF NOT EXISTS planned_payment_rules (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default-user',
 		start_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		interval_n INTEGER NOT NULL DEFAULT 1,
 		interval_type TEXT NOT NULL DEFAULT 'MONTH',
@@ -282,33 +312,56 @@ func (db *DB) migrateSQLite() error {
 		FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_transactions_datetime ON transactions(date_time);
-	CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
-	CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+	CREATE INDEX IF NOT EXISTS idx_users_provider_sub ON users(provider, subject);
+	CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+	CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
+	CREATE INDEX IF NOT EXISTS idx_tags_user ON tags(user_id);
+	CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_budgets_user ON budgets(user_id);
+	CREATE INDEX IF NOT EXISTS idx_loans_user ON loans(user_id);
+	CREATE INDEX IF NOT EXISTS idx_planned_user ON planned_payment_rules(user_id);
+	CREATE INDEX IF NOT EXISTS idx_settings_user ON settings(user_id);
 	`
 
-	_, err := db.DB.Exec(schema)
-	if err != nil {
+	if _, err := db.DB.Exec(schema); err != nil {
 		return err
 	}
 
-	// Safely add columns if upgrading existing database
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN date_format TEXT NOT NULL DEFAULT 'YYYY-MM-DD'")
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN time_format TEXT NOT NULL DEFAULT '24_HOUR'")
+	// Safe alter columns for existing databases
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN parent_id TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE tags ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN subcategory_id TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE budgets ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loans ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loan_records ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE planned_payment_rules ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
 
-	// Create indexes after columns are guaranteed to exist
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_transactions_subcategory ON transactions(subcategory_id)")
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id)")
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tag_id)")
 	return nil
 }
 
 func (db *DB) migratePostgres() error {
 	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id VARCHAR(64) PRIMARY KEY,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		name VARCHAR(255) NOT NULL,
+		avatar_url TEXT,
+		provider VARCHAR(32) NOT NULL DEFAULT 'local',
+		subject VARCHAR(255),
+		role VARCHAR(32) NOT NULL DEFAULT 'user',
+		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS settings (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		theme VARCHAR(32) NOT NULL DEFAULT 'DARK',
 		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
 		buffer_amount DOUBLE PRECISION NOT NULL DEFAULT 0.0,
@@ -323,6 +376,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS accounts (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
 		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
@@ -336,6 +390,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS categories (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
 		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
@@ -348,7 +403,8 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS tags (
 		id VARCHAR(64) PRIMARY KEY,
-		name VARCHAR(255) NOT NULL UNIQUE,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
+		name VARCHAR(255) NOT NULL,
 		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
 		order_num INTEGER NOT NULL DEFAULT 0,
 		is_deleted INTEGER NOT NULL DEFAULT 0,
@@ -358,6 +414,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS transactions (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		account_id VARCHAR(64) NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
 		type VARCHAR(32) NOT NULL,
 		amount DOUBLE PRECISION NOT NULL,
@@ -385,6 +442,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS budgets (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		amount DOUBLE PRECISION NOT NULL,
 		category_ids TEXT,
@@ -397,6 +455,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS loans (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		amount DOUBLE PRECISION NOT NULL,
 		type VARCHAR(32) NOT NULL,
@@ -414,6 +473,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS loan_records (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		loan_id VARCHAR(64) NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
 		amount DOUBLE PRECISION NOT NULL,
 		date_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -426,6 +486,7 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS planned_payment_rules (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		start_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		interval_n INTEGER NOT NULL DEFAULT 1,
 		interval_type VARCHAR(32) NOT NULL DEFAULT 'MONTH',
@@ -442,33 +503,54 @@ func (db *DB) migratePostgres() error {
 		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_pg_transactions_datetime ON transactions(date_time);
-	CREATE INDEX IF NOT EXISTS idx_pg_transactions_account ON transactions(account_id);
-	CREATE INDEX IF NOT EXISTS idx_pg_transactions_category ON transactions(category_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_users_email ON users(email);
+	CREATE INDEX IF NOT EXISTS idx_pg_accounts_user ON accounts(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_categories_user ON categories(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_tags_user ON tags(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_transactions_user ON transactions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_budgets_user ON budgets(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_loans_user ON loans(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_planned_user ON planned_payment_rules(user_id);
+	CREATE INDEX IF NOT EXISTS idx_pg_settings_user ON settings(user_id);
 	`
 
-	_, err := db.DB.Exec(schema)
-	if err != nil {
+	if _, err := db.DB.Exec(schema); err != nil {
 		return err
 	}
 
-	// Safely add columns if upgrading existing database
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD'")
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR'")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE tags ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS subcategory_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE budgets ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loans ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loan_records ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE planned_payment_rules ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 
-	// Create indexes after columns are guaranteed to exist
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_transactions_subcategory ON transactions(subcategory_id)")
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_categories_parent ON categories(parent_id)")
-	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_pg_transaction_tags_tag ON transaction_tags(tag_id)")
 	return nil
 }
 
 func (db *DB) migrateMariaDB() error {
 	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id VARCHAR(64) PRIMARY KEY,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		name VARCHAR(255) NOT NULL,
+		avatar_url TEXT,
+		provider VARCHAR(32) NOT NULL DEFAULT 'local',
+		subject VARCHAR(255),
+		role VARCHAR(32) NOT NULL DEFAULT 'user',
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 	CREATE TABLE IF NOT EXISTS settings (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		theme VARCHAR(32) NOT NULL DEFAULT 'DARK',
 		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
 		buffer_amount DOUBLE NOT NULL DEFAULT 0.0,
@@ -483,6 +565,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS accounts (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		currency VARCHAR(16) NOT NULL DEFAULT 'USD',
 		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
@@ -496,6 +579,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS categories (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		color VARCHAR(32) NOT NULL DEFAULT '#12B880',
 		icon VARCHAR(64) NOT NULL DEFAULT 'tag',
@@ -508,7 +592,8 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS tags (
 		id VARCHAR(64) PRIMARY KEY,
-		name VARCHAR(255) NOT NULL UNIQUE,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
+		name VARCHAR(255) NOT NULL,
 		color VARCHAR(32) NOT NULL DEFAULT '#5C3DF5',
 		order_num INT NOT NULL DEFAULT 0,
 		is_deleted INT NOT NULL DEFAULT 0,
@@ -518,6 +603,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS transactions (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		account_id VARCHAR(64) NOT NULL,
 		type VARCHAR(32) NOT NULL,
 		amount DOUBLE NOT NULL,
@@ -551,6 +637,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS budgets (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		amount DOUBLE NOT NULL,
 		category_ids TEXT,
@@ -563,6 +650,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS loans (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		name VARCHAR(255) NOT NULL,
 		amount DOUBLE NOT NULL,
 		type VARCHAR(32) NOT NULL,
@@ -581,6 +669,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS loan_records (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		loan_id VARCHAR(64) NOT NULL,
 		amount DOUBLE NOT NULL,
 		date_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -596,6 +685,7 @@ func (db *DB) migrateMariaDB() error {
 
 	CREATE TABLE IF NOT EXISTS planned_payment_rules (
 		id VARCHAR(64) PRIMARY KEY,
+		user_id VARCHAR(64) NOT NULL DEFAULT 'default-user',
 		start_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		interval_n INT NOT NULL DEFAULT 1,
 		interval_type VARCHAR(32) NOT NULL DEFAULT 'MONTH',
@@ -625,26 +715,71 @@ func (db *DB) migrateMariaDB() error {
 		}
 	}
 
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN date_format VARCHAR(32) NOT NULL DEFAULT 'YYYY-MM-DD'")
-	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN time_format VARCHAR(32) NOT NULL DEFAULT '24_HOUR'")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN parent_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE tags ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE transactions ADD COLUMN subcategory_id VARCHAR(64)")
+	_, _ = db.DB.Exec("ALTER TABLE budgets ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loans ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE loan_records ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+	_, _ = db.DB.Exec("ALTER TABLE planned_payment_rules ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
+
 	return nil
 }
 
-func (db *DB) seed() error {
-	// 1. Seed Settings if not exists
+func (db *DB) migrateMultiUserData() error {
+	// 1. Ensure default user exists
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM settings").Scan(&count)
-	if err != nil || count == 0 {
+	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", DefaultUserID).Scan(&count)
+	if err == nil && count == 0 {
 		_, _ = db.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format)
-			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, 'YYYY-MM-DD', '24_HOUR')
-		`, uuid.NewString())
+			INSERT INTO users (id, email, name, provider, role, created_at, updated_at)
+			VALUES (?, 'admin@ivy.local', 'Default Admin', 'local', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`, DefaultUserID)
 	}
 
-	// 2. Seed Categories if empty
-	err = db.QueryRow("SELECT COUNT(*) FROM categories WHERE is_deleted = 0").Scan(&count)
+	// 2. Backfill existing records with DefaultUserID
+	tables := []string{
+		"settings",
+		"accounts",
+		"categories",
+		"tags",
+		"transactions",
+		"budgets",
+		"loans",
+		"loan_records",
+		"planned_payment_rules",
+	}
+
+	for _, table := range tables {
+		_, _ = db.Exec(fmt.Sprintf("UPDATE %s SET user_id = ? WHERE user_id IS NULL OR user_id = ''", table), DefaultUserID)
+	}
+
+	return nil
+}
+
+func (db *DB) seedDefault() error {
+	return db.SeedUserData(DefaultUserID, "Default Admin")
+}
+
+// SeedUserData initializes default accounts, categories, tags, and settings for any user
+func (db *DB) SeedUserData(userID string, userName string) error {
+	// 1. Seed Settings if not exists for this user
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM settings WHERE user_id = ?", userID).Scan(&count)
+	if err == nil && count == 0 {
+		_, _ = db.Exec(`
+			INSERT INTO settings (id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format)
+			VALUES (?, ?, 'DARK', 'USD', 0.0, ?, 1, 0, 'YYYY-MM-DD', '24_HOUR')
+		`, uuid.NewString(), userID, userName+"'s Wallet")
+	}
+
+	// 2. Seed Categories if empty for this user
+	err = db.QueryRow("SELECT COUNT(*) FROM categories WHERE user_id = ? AND is_deleted = 0", userID).Scan(&count)
 	if err == nil && count == 0 {
 		defaultCategories := []struct {
 			name     string
@@ -670,23 +805,23 @@ func (db *DB) seed() error {
 		for _, cat := range defaultCategories {
 			id := uuid.NewString()
 			_, _ = db.Exec(`
-				INSERT INTO categories (id, name, color, icon, order_num)
-				VALUES (?, ?, ?, ?, ?)
-			`, id, cat.name, cat.color, cat.icon, cat.order)
+				INSERT INTO categories (id, user_id, name, color, icon, order_num)
+				VALUES (?, ?, ?, ?, ?, ?)
+			`, id, userID, cat.name, cat.color, cat.icon, cat.order)
 
 			for subIdx, subName := range cat.children {
 				subId := uuid.NewString()
 				_, _ = db.Exec(`
-					INSERT INTO categories (id, name, color, icon, order_num, parent_id)
-					VALUES (?, ?, ?, ?, ?, ?)
-				`, subId, subName, cat.color, cat.icon, subIdx+1, id)
+					INSERT INTO categories (id, user_id, name, color, icon, order_num, parent_id)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+				`, subId, userID, subName, cat.color, cat.icon, subIdx+1, id)
 			}
 		}
 	}
 
-	// 3. Seed Default Tags if empty
+	// 3. Seed Default Tags if empty for this user
 	var tagCount int
-	_ = db.QueryRow("SELECT COUNT(*) FROM tags WHERE is_deleted = 0").Scan(&tagCount)
+	_ = db.QueryRow("SELECT COUNT(*) FROM tags WHERE user_id = ? AND is_deleted = 0", userID).Scan(&tagCount)
 	if tagCount == 0 {
 		defaultTags := []struct {
 			name  string
@@ -703,14 +838,14 @@ func (db *DB) seed() error {
 		for _, t := range defaultTags {
 			id := uuid.NewString()
 			_, _ = db.Exec(`
-				INSERT INTO tags (id, name, color, order_num)
-				VALUES (?, ?, ?, ?)
-			`, id, t.name, t.color, t.order)
+				INSERT INTO tags (id, user_id, name, color, order_num)
+				VALUES (?, ?, ?, ?, ?)
+			`, id, userID, t.name, t.color, t.order)
 		}
 	}
 
-	// 4. Seed Sample Accounts if empty
-	err = db.QueryRow("SELECT COUNT(*) FROM accounts WHERE is_deleted = 0").Scan(&count)
+	// 4. Seed Sample Accounts if empty for this user
+	err = db.QueryRow("SELECT COUNT(*) FROM accounts WHERE user_id = ? AND is_deleted = 0", userID).Scan(&count)
 	if err == nil && count == 0 {
 		defaultAccounts := []struct {
 			name     string
@@ -727,56 +862,163 @@ func (db *DB) seed() error {
 		for _, acc := range defaultAccounts {
 			id := uuid.NewString()
 			_, _ = db.Exec(`
-				INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance)
-				VALUES (?, ?, ?, ?, ?, ?, 1)
-			`, id, acc.name, acc.currency, acc.color, acc.icon, acc.order)
-		}
-
-		// Add sample initial transactions
-		var bankId, cashId string
-		_ = db.QueryRow("SELECT id FROM accounts WHERE name = 'Main Bank Card'").Scan(&bankId)
-		_ = db.QueryRow("SELECT id FROM accounts WHERE name = 'Cash Wallet'").Scan(&cashId)
-
-		var salaryCatId, foodCatId, grocCatId string
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Salary & Income' AND parent_id IS NULL").Scan(&salaryCatId)
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Food & Dining' AND parent_id IS NULL").Scan(&foodCatId)
-		_ = db.QueryRow("SELECT id FROM categories WHERE name = 'Groceries' AND parent_id IS NULL").Scan(&grocCatId)
-
-		now := time.Now().UTC()
-		if bankId != "" && salaryCatId != "" {
-			_, _ = db.Exec(`
-				INSERT INTO transactions (id, account_id, type, amount, title, date_time, category_id)
-				VALUES (?, ?, 'INCOME', 3500.0, 'Monthly Salary', ?, ?)
-			`, uuid.NewString(), bankId, now.AddDate(0, 0, -5), salaryCatId)
-		}
-
-		if bankId != "" && foodCatId != "" {
-			_, _ = db.Exec(`
-				INSERT INTO transactions (id, account_id, type, amount, title, date_time, category_id)
-				VALUES (?, ?, 'EXPENSE', 45.50, 'Dinner with friends', ?, ?)
-			`, uuid.NewString(), bankId, now.AddDate(0, 0, -2), foodCatId)
-		}
-
-		if cashId != "" && grocCatId != "" {
-			_, _ = db.Exec(`
-				INSERT INTO transactions (id, account_id, type, amount, title, date_time, category_id)
-				VALUES (?, ?, 'EXPENSE', 82.20, 'Weekly Groceries', ?, ?)
-			`, uuid.NewString(), cashId, now.AddDate(0, 0, -1), grocCatId)
-		}
-
-		// Sample Budget
-		if foodCatId != "" {
-			_, _ = db.Exec(`
-				INSERT INTO budgets (id, name, amount, category_ids, period, order_id)
-				VALUES (?, 'Dining Out Budget', 300.0, ?, 'MONTHLY', 1)
-			`, uuid.NewString(), `["`+foodCatId+`"]`)
+				INSERT INTO accounts (id, user_id, name, currency, color, icon, order_num, include_in_balance)
+				VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+			`, id, userID, acc.name, acc.currency, acc.color, acc.icon, acc.order)
 		}
 	}
 
 	return nil
 }
 
-// Sync Upsert Helpers supporting SQLite, PostgreSQL, and MariaDB
+// User CRUD Helpers
+func (db *DB) GetUserByID(id string) (*models.User, error) {
+	var u models.User
+	var avatar, sub sql.NullString
+	err := db.QueryRow(`
+		SELECT id, email, name, avatar_url, provider, subject, role, created_at, updated_at
+		FROM users
+		WHERE id = ?
+	`, id).Scan(&u.ID, &u.Email, &u.Name, &avatar, &u.Provider, &sub, &u.Role, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if avatar.Valid {
+		u.AvatarURL = avatar.String
+	}
+	if sub.Valid {
+		u.Subject = sub.String
+	}
+	return &u, nil
+}
+
+func (db *DB) GetUserByEmail(email string) (*models.User, error) {
+	var u models.User
+	var avatar, sub sql.NullString
+	err := db.QueryRow(`
+		SELECT id, email, name, avatar_url, provider, subject, role, created_at, updated_at
+		FROM users
+		WHERE LOWER(email) = LOWER(?)
+	`, email).Scan(&u.ID, &u.Email, &u.Name, &avatar, &u.Provider, &sub, &u.Role, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if avatar.Valid {
+		u.AvatarURL = avatar.String
+	}
+	if sub.Valid {
+		u.Subject = sub.String
+	}
+	return &u, nil
+}
+
+func (db *DB) GetUserBySubject(provider, subject string) (*models.User, error) {
+	var u models.User
+	var avatar, sub sql.NullString
+	err := db.QueryRow(`
+		SELECT id, email, name, avatar_url, provider, subject, role, created_at, updated_at
+		FROM users
+		WHERE provider = ? AND subject = ?
+	`, provider, subject).Scan(&u.ID, &u.Email, &u.Name, &avatar, &u.Provider, &sub, &u.Role, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if avatar.Valid {
+		u.AvatarURL = avatar.String
+	}
+	if sub.Valid {
+		u.Subject = sub.String
+	}
+	return &u, nil
+}
+
+func (db *DB) UpsertOIDCUser(email, name, avatarURL, subject string) (*models.User, error) {
+	// 1. Try finding by subject
+	existing, err := db.GetUserBySubject("oidc", subject)
+	if err == nil && existing != nil {
+		// Update name & avatar if changed
+		now := time.Now().UTC()
+		_, _ = db.Exec(`
+			UPDATE users SET name = ?, avatar_url = ?, updated_at = ? WHERE id = ?
+		`, name, avatarURL, now, existing.ID)
+		existing.Name = name
+		existing.AvatarURL = avatarURL
+		existing.UpdatedAt = now
+		return existing, nil
+	}
+
+	// 2. Try finding by email
+	existing, err = db.GetUserByEmail(email)
+	if err == nil && existing != nil {
+		now := time.Now().UTC()
+		_, _ = db.Exec(`
+			UPDATE users SET name = ?, avatar_url = ?, provider = 'oidc', subject = ?, updated_at = ? WHERE id = ?
+		`, name, avatarURL, subject, now, existing.ID)
+		existing.Name = name
+		existing.AvatarURL = avatarURL
+		existing.Provider = "oidc"
+		existing.Subject = subject
+		existing.UpdatedAt = now
+		return existing, nil
+	}
+
+	// 3. Create new user
+	newID := uuid.NewString()
+	now := time.Now().UTC()
+	_, err = db.Exec(`
+		INSERT INTO users (id, email, name, avatar_url, provider, subject, role, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'oidc', ?, 'user', ?, ?)
+	`, newID, email, name, avatarURL, subject, now, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Automatically seed default data for new user
+	_ = db.SeedUserData(newID, name)
+
+	return &models.User{
+		ID:        newID,
+		Email:     email,
+		Name:      name,
+		AvatarURL: avatarURL,
+		Provider:  "oidc",
+		Subject:   subject,
+		Role:      "user",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+func (db *DB) UpsertLocalOrDevUser(email, name, provider string) (*models.User, error) {
+	existing, err := db.GetUserByEmail(email)
+	if err == nil && existing != nil {
+		return existing, nil
+	}
+
+	newID := uuid.NewString()
+	now := time.Now().UTC()
+	_, err = db.Exec(`
+		INSERT INTO users (id, email, name, provider, role, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'user', ?, ?)
+	`, newID, email, name, provider, now, now)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = db.SeedUserData(newID, name)
+
+	return &models.User{
+		ID:        newID,
+		Email:     email,
+		Name:      name,
+		Provider:  provider,
+		Role:      "user",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+// Sync Upsert Helpers supporting SQLite, PostgreSQL, and MariaDB (Multi-User scoped)
 func (db *DB) UpsertAccount(a models.Account, now time.Time) error {
 	incInBal := 0
 	if a.IncludeInBalance {
@@ -789,8 +1031,8 @@ func (db *DB) UpsertAccount(a models.Account, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO accounts (id, user_id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				name = VALUES(name),
 				currency = VALUES(currency),
@@ -800,14 +1042,13 @@ func (db *DB) UpsertAccount(a models.Account, now time.Time) error {
 				include_in_balance = VALUES(include_in_balance),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, a.ID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
+		`, a.ID, a.UserID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
 		return err
 	}
 
-	// SQLite and PostgreSQL use ON CONFLICT(id)
 	_, err := db.Exec(`
-		INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO accounts (id, user_id, name, currency, color, icon, order_num, include_in_balance, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			currency = excluded.currency,
@@ -817,7 +1058,7 @@ func (db *DB) UpsertAccount(a models.Account, now time.Time) error {
 			include_in_balance = excluded.include_in_balance,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, a.ID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
+	`, a.ID, a.UserID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, isDel, a.CreatedAt, now)
 	return err
 }
 
@@ -829,8 +1070,8 @@ func (db *DB) UpsertCategory(c models.Category, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO categories (id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO categories (id, user_id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				name = VALUES(name),
 				color = VALUES(color),
@@ -839,13 +1080,13 @@ func (db *DB) UpsertCategory(c models.Category, now time.Time) error {
 				parent_id = VALUES(parent_id),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
+		`, c.ID, c.UserID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
 		return err
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO categories (id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO categories (id, user_id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			color = excluded.color,
@@ -854,7 +1095,7 @@ func (db *DB) UpsertCategory(c models.Category, now time.Time) error {
 			parent_id = excluded.parent_id,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, c.ID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
+	`, c.ID, c.UserID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, isDel, c.CreatedAt, now)
 	return err
 }
 
@@ -866,28 +1107,28 @@ func (db *DB) UpsertTag(t models.Tag, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO tags (id, name, color, order_num, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO tags (id, user_id, name, color, order_num, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				name = VALUES(name),
 				color = VALUES(color),
 				order_num = VALUES(order_num),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, t.ID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
+		`, t.ID, t.UserID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
 		return err
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO tags (id, name, color, order_num, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tags (id, user_id, name, color, order_num, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			color = excluded.color,
 			order_num = excluded.order_num,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, t.ID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
+	`, t.ID, t.UserID, t.Name, t.Color, t.OrderNum, isDel, t.CreatedAt, now)
 	return err
 }
 
@@ -899,8 +1140,8 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 
 	if db.Driver == "mariadb" {
 		_, err := db.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO transactions (id, user_id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				account_id = VALUES(account_id),
 				type = VALUES(type),
@@ -915,13 +1156,13 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 				due_date = VALUES(due_date),
 				is_deleted = VALUES(is_deleted),
 				updated_at = VALUES(updated_at)
-		`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+		`, t.ID, t.UserID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
 		return err
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, user_id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, due_date, recurring_rule_id, loan_id, loan_record_id, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			account_id = excluded.account_id,
 			type = excluded.type,
@@ -936,6 +1177,6 @@ func (db *DB) UpsertTransaction(t models.Transaction, now time.Time) error {
 			due_date = excluded.due_date,
 			is_deleted = excluded.is_deleted,
 			updated_at = excluded.updated_at
-	`, t.ID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
+	`, t.ID, t.UserID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, t.DateTime, t.CategoryId, t.SubcategoryId, t.DueDate, t.RecurringRuleId, t.LoanId, t.LoanRecordId, isDel, t.CreatedAt, now)
 	return err
 }

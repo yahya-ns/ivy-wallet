@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -19,8 +20,10 @@ type PlannedHandler struct {
 }
 
 func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	rows, err := h.DB.Query(`
-		SELECT p.id, p.start_date, p.interval_n, p.interval_type, p.one_time, p.type,
+		SELECT p.id, p.user_id, p.start_date, p.interval_n, p.interval_type, p.one_time, p.type,
 		       p.account_id, p.amount, p.category_id, p.title, p.description, p.is_active,
 		       p.is_deleted, p.created_at, p.updated_at,
 		       a.name, a.currency, a.color, a.icon,
@@ -28,9 +31,9 @@ func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		FROM planned_payment_rules p
 		LEFT JOIN accounts a ON p.account_id = a.id
 		LEFT JOIN categories c ON p.category_id = c.id
-		WHERE p.is_deleted = 0
+		WHERE p.user_id = ? AND p.is_deleted = 0
 		ORDER BY p.created_at DESC
-	`)
+	`, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -46,7 +49,7 @@ func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		var cName, cColor, cIcon sql.NullString
 
 		if err := rows.Scan(
-			&p.ID, &p.StartDate, &p.IntervalN, &p.IntervalType, &oneTime, &p.Type,
+			&p.ID, &p.UserID, &p.StartDate, &p.IntervalN, &p.IntervalType, &oneTime, &p.Type,
 			&p.AccountId, &p.Amount, &catID, &title, &desc, &isActive,
 			&isDel, &p.CreatedAt, &p.UpdatedAt,
 			&aName, &aCurr, &aColor, &aIcon,
@@ -73,6 +76,7 @@ func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		if aName.Valid {
 			p.Account = &models.Account{
 				ID:       p.AccountId,
+				UserID:   p.UserID,
 				Name:     aName.String,
 				Currency: aCurr.String,
 				Color:    aColor.String,
@@ -82,10 +86,11 @@ func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 		if catID.Valid && cName.Valid {
 			p.Category = &models.Category{
-				ID:    catID.String,
-				Name:  cName.String,
-				Color: cColor.String,
-				Icon:  cIcon.String,
+				ID:     catID.String,
+				UserID: p.UserID,
+				Name:   cName.String,
+				Color:  cColor.String,
+				Icon:   cIcon.String,
 			}
 		}
 
@@ -93,10 +98,12 @@ func (h *PlannedHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rules)
 }
 
 func (h *PlannedHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var input struct {
 		StartDate    *string  `json:"startDate"`
 		IntervalN    *int     `json:"intervalN"`
@@ -147,9 +154,9 @@ func (h *PlannedHandler) Create(w http.ResponseWriter, r *http.Request) {
 	amount := math.Abs(input.Amount)
 
 	_, err := h.DB.Exec(`
-		INSERT INTO planned_payment_rules (id, start_date, interval_n, interval_type, one_time, type, account_id, amount, category_id, title, description, is_active, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
-	`, id, startDate, intervalN, intervalType, oneTime, pType, input.AccountId, amount, input.CategoryId, input.Title, input.Description, now, now)
+		INSERT INTO planned_payment_rules (id, user_id, start_date, interval_n, interval_type, one_time, type, account_id, amount, category_id, title, description, is_active, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
+	`, id, userID, startDate, intervalN, intervalType, oneTime, pType, input.AccountId, amount, input.CategoryId, input.Title, input.Description, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -158,6 +165,7 @@ func (h *PlannedHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	rule := models.PlannedPaymentRule{
 		ID:           id,
+		UserID:       userID,
 		StartDate:    startDate,
 		IntervalN:    intervalN,
 		IntervalType: intervalType,
@@ -175,10 +183,11 @@ func (h *PlannedHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(rule)
 }
 
 func (h *PlannedHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var input struct {
 		StartDate    *string  `json:"startDate"`
@@ -208,8 +217,8 @@ func (h *PlannedHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	err := h.DB.QueryRow(`
 		SELECT start_date, interval_n, interval_type, one_time, type, account_id, amount, category_id, title, description, is_active
-		FROM planned_payment_rules WHERE id = ?
-	`, id).Scan(
+		FROM planned_payment_rules WHERE id = ? AND user_id = ?
+	`, id, userID).Scan(
 		&startDate, &intervalN, &intervalType, &oneTime, &pType, &accountId, &amount,
 		&categoryId, &title, &description, &isActive,
 	)
@@ -270,8 +279,8 @@ func (h *PlannedHandler) Update(w http.ResponseWriter, r *http.Request) {
 		UPDATE planned_payment_rules
 		SET start_date = ?, interval_n = ?, interval_type = ?, one_time = ?, type = ?,
 		    account_id = ?, amount = ?, category_id = ?, title = ?, description = ?, is_active = ?, updated_at = ?
-		WHERE id = ?
-	`, startDate, intervalN, intervalType, oneTime, pType, accountId, amount, categoryId, title, description, isActive, now, id)
+		WHERE id = ? AND user_id = ?
+	`, startDate, intervalN, intervalType, oneTime, pType, accountId, amount, categoryId, title, description, isActive, now, id, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -279,8 +288,9 @@ func (h *PlannedHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":        id,
+		"userId":    userID,
 		"startDate": startDate,
 		"amount":    amount,
 		"updatedAt": now,
@@ -288,15 +298,16 @@ func (h *PlannedHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlannedHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	now := time.Now().UTC()
 
-	_, err := h.DB.Exec(`UPDATE planned_payment_rules SET is_deleted = 1, updated_at = ? WHERE id = ?`, now, id)
+	_, err := h.DB.Exec(`UPDATE planned_payment_rules SET is_deleted = 1, updated_at = ? WHERE id = ? AND user_id = ?`, now, id, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useAuth } from "@/lib/authContext";
 import { CURRENCY_LIST, DATE_FORMAT_OPTIONS, TIME_FORMAT_OPTIONS } from "@/lib/constants";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
@@ -20,6 +21,9 @@ import {
   Zap,
   Calendar,
   Clock,
+  User as UserIcon,
+  LogOut,
+  KeyRound,
 } from "lucide-react";
 
 export const SettingsPage: React.FC = () => {
@@ -39,6 +43,8 @@ export const SettingsPage: React.FC = () => {
     formatDateTime,
     formatRelative,
   } = useTheme();
+
+  const { user, authConfig, logout } = useAuth();
 
   const {
     isOnline,
@@ -126,6 +132,15 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "U";
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300 max-w-4xl mx-auto">
       {/* Header */}
@@ -134,9 +149,53 @@ export const SettingsPage: React.FC = () => {
           Preferences & Settings
         </h1>
         <p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
-          Customize themes, currency, sync with mobile apps, and manage backups.
+          Customize themes, multi-user accounts, currency, sync with mobile apps, and manage backups.
         </p>
       </div>
+
+      {/* User Account & Session Card */}
+      {user && (
+        <IvyCard className="p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-ivy-purple/30 shadow-md"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-ivy-purple to-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-md">
+                  {initials}
+                </div>
+              )}
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">{user.name}</h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{user.email}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-ivy-purple/10 text-ivy-purple border border-ivy-purple/20">
+                    <ShieldCheck size={12} />
+                    {user.provider ? user.provider.toUpperCase() : "OIDC"}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)]">
+                    Role: {user.role || "user"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <IvyButton
+              onClick={logout}
+              variant="danger"
+              size="sm"
+              className="self-start sm:self-center"
+            >
+              <LogOut size={15} />
+              <span>Sign Out</span>
+            </IvyButton>
+          </div>
+        </IvyCard>
+      )}
 
       {/* Theme Settings */}
       <IvyCard className="p-6 space-y-4">
@@ -248,155 +307,108 @@ export const SettingsPage: React.FC = () => {
 
       {/* Date & Time Formatting Settings */}
       <IvyCard className="p-6 space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-ivy-purple/10 text-ivy-purple flex items-center justify-center">
-              <Calendar size={20} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-[var(--text-primary)]">
-                Date & Time Display Format
-              </h3>
-              <p className="text-xs text-[var(--text-muted)]">
-                Choose how dates, timestamps, and clocks are formatted across transactions and summaries.
-              </p>
-            </div>
-          </div>
+        <div>
+          <h3 className="text-base font-bold text-[var(--text-primary)]">
+            Date & Time Formatting
+          </h3>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Choose your preferred date and time display conventions across transactions, reports, and history.
+          </p>
         </div>
 
-        {/* Live Preview Box */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-ivy-purple/10 via-ivy-blue/10 to-transparent border border-ivy-purple/20 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-ivy-purple uppercase tracking-wider flex items-center gap-1.5">
-              <Clock size={13} />
-              <span>Live Formatting Preview</span>
-            </span>
-            <span className="text-[10px] bg-ivy-purple/15 text-ivy-purple px-2 py-0.5 rounded-full font-semibold">
-              Current Time
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)]">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
-                Formatted Date
-              </span>
-              <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5 truncate">
-                {formatDate(new Date())}
-              </p>
-            </div>
-
-            <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)]">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
-                Formatted Time
-              </span>
-              <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">
-                {formatTime(new Date())}
-              </p>
-            </div>
-
-            <div className="bg-[var(--bg-surface-elevated)] p-3 rounded-xl border border-[var(--border-subtle)]">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase font-semibold block">
-                Full Timestamp
-              </span>
-              <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5 truncate">
-                {formatDateTime(new Date())}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          {/* Date Format Selector */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Date Format Pattern
+              <Calendar size={13} className="inline mr-1.5 text-ivy-purple" />
+              Date Format
             </label>
             <select
               value={dateFormat}
               onChange={(e) => setDateFormat(e.target.value)}
               className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
             >
-              {DATE_FORMAT_OPTIONS.map((df) => (
-                <option key={df.code} value={df.code}>
-                  {df.label}
+              {DATE_FORMAT_OPTIONS.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.label} ({opt.example})
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-              Affects transactions list, loan due dates, recurring plans, and exports.
-            </p>
           </div>
 
-          {/* Time Format Selector */}
           <div>
             <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Time System (Clock)
+              <Clock size={13} className="inline mr-1.5 text-ivy-orange" />
+              Time Format
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              {TIME_FORMAT_OPTIONS.map((tf) => (
-                <button
-                  key={tf.code}
-                  type="button"
-                  onClick={() => setTimeFormat(tf.code)}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                    timeFormat === tf.code
-                      ? "border-ivy-purple ring-2 ring-ivy-purple/30 bg-ivy-purple/10 text-ivy-purple font-bold"
-                      : "border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:border-[var(--border-color)]"
-                  }`}
-                >
-                  <span>{tf.label}</span>
-                </button>
+            <select
+              value={timeFormat}
+              onChange={(e) => setTimeFormat(e.target.value)}
+              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+            >
+              {TIME_FORMAT_OPTIONS.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.label} ({opt.example})
+                </option>
               ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] space-y-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+            Live Preview
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <span className="text-[var(--text-muted)] block text-[11px]">Formatted Date:</span>
+              <span className="font-bold text-[var(--text-primary)]">{formatDate(new Date())}</span>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-              Choose between standard 24-hour military clock or 12-hour AM/PM format.
-            </p>
+            <div>
+              <span className="text-[var(--text-muted)] block text-[11px]">Formatted Time:</span>
+              <span className="font-bold text-[var(--text-primary)]">{formatTime(new Date())}</span>
+            </div>
+            <div>
+              <span className="text-[var(--text-muted)] block text-[11px]">Complete Timestamp:</span>
+              <span className="font-bold text-ivy-purple">{formatDateTime(new Date())}</span>
+            </div>
           </div>
         </div>
       </IvyCard>
 
-      {/* PWA App Installation & Offline Auto-Sync Hub */}
-      <IvyCard className="p-6 space-y-5 border-ivy-purple/30 bg-gradient-to-br from-ivy-purple/10 via-ivy-purple/5 to-transparent">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img
-              src="/pwa-192x192.png"
-              alt="Ivy Logo"
-              className="w-12 h-12 rounded-2xl object-cover"
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-[var(--text-primary)]">
-                  PWA & Offline Auto-Sync
-                </h3>
-                <span className="text-[10px] bg-ivy-purple/20 text-ivy-purple font-bold px-2 py-0.5 rounded-full border border-ivy-purple/30">
-                  Concept 4 Active
-                </span>
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Work 100% offline with IndexedDB local storage & automatic background cloud sync.
-              </p>
+      {/* Cloud & PWA Offline Sync Engine Card */}
+      <IvyCard className="p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-[var(--text-primary)]">Offline Sync Engine</h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-ivy-purple/10 text-ivy-purple border border-ivy-purple/20">
+                PWA Cloud Sync
+              </span>
             </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Automatic background bi-directional delta synchronization between your browser and Ivy backend.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
             {isInstallable && (
               <IvyButton
                 onClick={installPwa}
-                variant="primary"
+                variant="secondary"
                 size="sm"
-                className="shadow-md shadow-ivy-purple/30"
+                className="shadow-sm font-bold border-ivy-emerald/40 text-ivy-emerald"
               >
-                <Download size={14} className="stroke-[2.5]" />
-                <span>Install App</span>
+                <Download size={14} />
+                <span>Install PWA</span>
               </IvyButton>
             )}
+
             <IvyButton
               onClick={handleManualSync}
-              disabled={isSyncing || !isOnline}
-              variant="secondary"
+              variant="primary"
               size="sm"
+              disabled={isSyncing}
+              className="shadow-sm font-bold"
             >
               <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
               <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>

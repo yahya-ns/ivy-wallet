@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -16,26 +17,29 @@ type SettingsHandler struct {
 }
 
 func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var s models.Settings
 	var hideBal int
 	var dateFormat, timeFormat sql.NullString
 
 	err := h.DB.QueryRow(`
-		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at
-		FROM settings LIMIT 1
-	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
+		SELECT id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at
+		FROM settings WHERE user_id = ? LIMIT 1
+	`, userID).Scan(&s.ID, &s.UserID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
 
 	if err != nil {
-		// Initialize if missing
+		// Initialize for this user if missing
 		id := uuid.NewString()
 		now := time.Now().UTC()
 		_, _ = h.DB.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
-			VALUES (?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, 'YYYY-MM-DD', '24_HOUR', ?, ?)
-		`, id, now, now)
+			INSERT INTO settings (id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
+			VALUES (?, ?, 'DARK', 'USD', 0.0, 'My Ivy Wallet', 1, 0, 'YYYY-MM-DD', '24_HOUR', ?, ?)
+		`, id, userID, now, now)
 
 		s = models.Settings{
 			ID:             id,
+			UserID:         userID,
 			Theme:          "DARK",
 			Currency:       "USD",
 			BufferAmount:   0.0,
@@ -62,10 +66,12 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s)
+	_ = json.NewEncoder(w).Encode(s)
 }
 
 func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var input struct {
 		Theme          *string  `json:"theme"`
 		Currency       *string  `json:"currency"`
@@ -87,14 +93,15 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var dateFormat, timeFormat sql.NullString
 
 	err := h.DB.QueryRow(`
-		SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format
-		FROM settings LIMIT 1
-	`).Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat)
+		SELECT id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format
+		FROM settings WHERE user_id = ? LIMIT 1
+	`, userID).Scan(&s.ID, &s.UserID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat)
 
 	now := time.Now().UTC()
 
 	if err != nil {
 		s.ID = uuid.NewString()
+		s.UserID = userID
 		s.Theme = "DARK"
 		s.Currency = "USD"
 		s.BufferAmount = 0.0
@@ -105,9 +112,9 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		hideBal = 0
 
 		_, _ = h.DB.Exec(`
-			INSERT INTO settings (id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, s.ID, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, now)
+			INSERT INTO settings (id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, s.ID, userID, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, now)
 	} else {
 		if dateFormat.Valid && dateFormat.String != "" {
 			s.DateFormat = dateFormat.String
@@ -153,8 +160,8 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	_, err = h.DB.Exec(`
 		UPDATE settings
 		SET theme = ?, currency = ?, buffer_amount = ?, name = ?, first_day_of_week = ?, hide_balance = ?, date_format = ?, time_format = ?, updated_at = ?
-		WHERE id = ?
-	`, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, s.ID)
+		WHERE id = ? AND user_id = ?
+	`, s.Theme, s.Currency, s.BufferAmount, s.Name, s.FirstDayOfWeek, hideBal, s.DateFormat, s.TimeFormat, now, s.ID, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -165,6 +172,5 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	s.UpdatedAt = now
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s)
+	_ = json.NewEncoder(w).Encode(s)
 }
-

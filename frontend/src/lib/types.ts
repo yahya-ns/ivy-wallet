@@ -3,8 +3,28 @@ export type LoanType = "BORROW" | "LEND";
 export type ThemeMode = "LIGHT" | "DARK" | "TRUE_BLACK";
 export type BudgetPeriod = "MONTHLY" | "WEEKLY" | "ONE_TIME";
 
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  provider: "oidc" | "local" | "dev" | string;
+  role: "admin" | "user" | string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AuthConfig {
+  authEnabled: boolean;
+  oidcEnabled: boolean;
+  oidcProviderName: string;
+  localAuthEnabled: boolean;
+  devLoginEnabled: boolean;
+}
+
 export interface Account {
   id: string;
+  userId?: string;
   name: string;
   currency: string;
   color: string;
@@ -21,6 +41,7 @@ export interface Account {
 
 export interface Category {
   id: string;
+  userId?: string;
   name: string;
   color: string;
   icon: string;
@@ -35,6 +56,7 @@ export interface Category {
 
 export interface Tag {
   id: string;
+  userId?: string;
   name: string;
   color: string;
   orderNum: number;
@@ -46,6 +68,7 @@ export interface Tag {
 
 export interface Transaction {
   id: string;
+  userId?: string;
   accountId: string;
   type: TransactionType;
   amount: number;
@@ -73,6 +96,7 @@ export interface Transaction {
 
 export interface Budget {
   id: string;
+  userId?: string;
   name: string;
   amount: number;
   categoryIds?: string | null;
@@ -88,6 +112,7 @@ export interface Budget {
 
 export interface LoanRecord {
   id: string;
+  userId?: string;
   loanId: string;
   amount: number;
   dateTime: string;
@@ -101,6 +126,7 @@ export interface LoanRecord {
 
 export interface Loan {
   id: string;
+  userId?: string;
   name: string;
   amount: number;
   type: LoanType;
@@ -122,6 +148,7 @@ export interface Loan {
 
 export interface PlannedPaymentRule {
   id: string;
+  userId?: string;
   startDate: string;
   intervalN: number;
   intervalType: string;
@@ -154,6 +181,7 @@ export type TimeFormatOption = "12_HOUR" | "24_HOUR";
 
 export interface Settings {
   id: string;
+  userId?: string;
   theme: ThemeMode;
   currency: string;
   bufferAmount: number;
@@ -165,4 +193,3 @@ export interface Settings {
   createdAt: string;
   updatedAt: string;
 }
-

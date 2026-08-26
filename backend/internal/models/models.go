@@ -2,8 +2,43 @@ package models
 
 import "time"
 
+type User struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	AvatarURL string    `json:"avatarUrl,omitempty"`
+	Provider  string    `json:"provider"` // "oidc", "local", "dev"
+	Subject   string    `json:"subject,omitempty"`  // OIDC 'sub'
+	Role      string    `json:"role"`     // "admin", "user"
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type AuthConfigResponse struct {
+	AuthEnabled      bool   `json:"authEnabled"`
+	OIDCEnabled      bool   `json:"oidcEnabled"`
+	OIDCProviderName string `json:"oidcProviderName"`
+	LocalAuthEnabled bool   `json:"localAuthEnabled"`
+	DevLoginEnabled  bool   `json:"devLoginEnabled"`
+}
+
+type AuthMeResponse struct {
+	User *User `json:"user"`
+}
+
+type LocalLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type DevLoginRequest struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
 type Account struct {
 	ID               string    `json:"id"`
+	UserID           string    `json:"userId"`
 	Name             string    `json:"name"`
 	Currency         string    `json:"currency"`
 	Color            string    `json:"color"`
@@ -20,6 +55,7 @@ type Account struct {
 
 type Category struct {
 	ID            string     `json:"id"`
+	UserID        string     `json:"userId"`
 	Name          string     `json:"name"`
 	Color         string     `json:"color"`
 	Icon          string     `json:"icon"`
@@ -34,6 +70,7 @@ type Category struct {
 
 type Tag struct {
 	ID               string    `json:"id"`
+	UserID           string    `json:"userId"`
 	Name             string    `json:"name"`
 	Color            string    `json:"color"`
 	OrderNum         int       `json:"orderNum"`
@@ -50,6 +87,7 @@ type TransactionTag struct {
 
 type Transaction struct {
 	ID              string     `json:"id"`
+	UserID          string     `json:"userId"`
 	AccountId       string     `json:"accountId"`
 	Type            string     `json:"type"` // EXPENSE, INCOME, TRANSFER
 	Amount          float64    `json:"amount"`
@@ -79,6 +117,7 @@ type Transaction struct {
 
 type Budget struct {
 	ID          string    `json:"id"`
+	UserID      string    `json:"userId"`
 	Name        string    `json:"name"`
 	Amount      float64   `json:"amount"`
 	CategoryIds *string   `json:"categoryIds,omitempty"` // JSON string array or comma separated
@@ -94,6 +133,7 @@ type Budget struct {
 
 type Loan struct {
 	ID              string       `json:"id"`
+	UserID          string       `json:"userId"`
 	Name            string       `json:"name"`
 	Amount          float64      `json:"amount"`
 	Type            string       `json:"type"` // BORROW, LEND
@@ -115,6 +155,7 @@ type Loan struct {
 
 type LoanRecord struct {
 	ID            string    `json:"id"`
+	UserID        string    `json:"userId"`
 	LoanId        string    `json:"loanId"`
 	Amount        float64   `json:"amount"`
 	DateTime      time.Time `json:"dateTime"`
@@ -128,6 +169,7 @@ type LoanRecord struct {
 
 type PlannedPaymentRule struct {
 	ID           string    `json:"id"`
+	UserID       string    `json:"userId"`
 	StartDate    time.Time `json:"startDate"`
 	IntervalN    int       `json:"intervalN"`
 	IntervalType string    `json:"intervalType"` // DAY, WEEK, MONTH, YEAR
@@ -148,6 +190,7 @@ type PlannedPaymentRule struct {
 
 type Settings struct {
 	ID             string    `json:"id"`
+	UserID         string    `json:"userId"`
 	Theme          string    `json:"theme"` // LIGHT, DARK, TRUE_BLACK
 	Currency       string    `json:"currency"`
 	BufferAmount   float64   `json:"bufferAmount"`

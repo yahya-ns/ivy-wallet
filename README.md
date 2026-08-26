@@ -14,6 +14,8 @@
 ## ✨ Features
 
 - ⚡ **Ultra Lightweight & Blazing Fast**: Single static Go binary (~14MB) with sub-3ms response times.
+- 👥 **Multi-User & Data Isolation**: Complete multi-tenant workspace isolation per user with automated user data provisioning.
+- 🔐 **OpenID Connect (OIDC) & SSO Support**: Seamless Single Sign-On integration with **Authentik**, **Keycloak**, **Authelia**, **Google**, **Okta**, **Zitadel**, and generic OIDC providers.
 - 🗄️ **Multi-Database Support**: Out-of-the-box support for **SQLite** (default), **PostgreSQL**, and **MariaDB / MySQL**, configured via environment variables.
 - 📱 **Mobile & Cloud Sync Ready**: Built-in delta synchronization endpoint (`/api/sync`) supporting multi-device and mobile app offline sync.
 - 📊 **Rich Dashboard**: Net worth overview, monthly income/expense flow, spending breakdown donut charts, and multi-month cashflow trends.
@@ -38,18 +40,56 @@ ivy-wallet/
 ├── backend/                   # Go REST API Server + Embedded SPA + Multi-DB Engine
 │   ├── cmd/server/main.go     # Chi Router & //go:embed static SPA
 │   └── internal/
-│       ├── config/            # Environment variable configuration (DB_TYPE, DATABASE_URL)
+│       ├── auth/              # JWT TokenManager & OIDC Client (OpenID Connect Discovery)
+│       ├── config/            # Environment variable configuration (Auth, DB, OIDC)
 │       ├── database/          # Multi-DB Engine (SQLite, PostgreSQL, MariaDB) & migrations
-│       ├── handlers/          # REST Handlers (accounts, transactions, sync, reports, etc.)
+│       ├── handlers/          # REST Handlers (auth, accounts, transactions, sync, reports, etc.)
+│       ├── middleware/        # JWT Authentication & Multi-Tenant context middleware
 │       └── models/            # Go domain models & JSON schemas
 ├── frontend/                  # Lightweight Vite SPA
 │   ├── src/
-│   │   ├── components/        # Ivy UI Design System (Cards, Modals, Charts, Nav)
-│   │   ├── pages/             # Dashboard, Transactions, Budgets, Loans, Reports
-│   │   └── lib/               # Types, utils, theme provider, API client
+│   │   ├── components/        # Ivy UI Design System (Cards, Modals, Charts, Nav, UserMenu)
+│   │   ├── pages/             # Dashboard, Login, Transactions, Budgets, Loans, Reports
+│   │   └── lib/               # Types, auth context, theme provider, API client
 ├── Dockerfile                 # Multi-stage container build (~15MB Alpine runtime)
-├── docker-compose.yml         # One-command self-hosting setup (SQLite / Postgres / MariaDB)
+├── docker-compose.yml         # One-command self-hosting setup (SQLite / Postgres / MariaDB + OIDC)
 └── .github/workflows/         # Automated GitHub Actions CI/CD to GHCR
+```
+
+---
+
+## 🔐 Authentication & OIDC Configuration
+
+Ivy Wallet features a robust multi-user authentication system supporting both OpenID Connect (OIDC) Single Sign-On and local credentials.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTH_ENABLED` | `true` | Enables authentication middleware across all endpoints |
+| `JWT_SECRET` | *(auto-generated)* | 32+ character secret key for signing session tokens |
+| `SESSION_COOKIE_NAME` | `ivy_session` | Name of the HTTP-Only session cookie |
+| `OIDC_ENABLED` | `false` | Enables OpenID Connect authentication |
+| `OIDC_ISSUER_URL` | `""` | OIDC Issuer discovery URL (e.g. `https://auth.example.com/application/o/ivy-wallet/`) |
+| `OIDC_CLIENT_ID` | `""` | OIDC Client Identifier |
+| `OIDC_CLIENT_SECRET` | `""` | OIDC Client Secret |
+| `OIDC_REDIRECT_URL` | `http://localhost:3000/api/auth/oidc/callback` | Authorized redirect callback URL |
+| `OIDC_SCOPES` | `openid profile email` | Scopes requested from the identity provider |
+| `OIDC_PROVIDER_NAME` | `Single Sign-On (OIDC)` | Display label for the login button |
+| `LOCAL_AUTH_ENABLED` | `true` | Allows local email-based login |
+| `DEV_LOGIN_ENABLED` | `false` | Enables 1-click test user switcher in development mode |
+
+### Example: Authentik / Keycloak / Google Setup
+
+```env
+AUTH_ENABLED=true
+JWT_SECRET=your-random-long-secret-key-string-here
+OIDC_ENABLED=true
+OIDC_ISSUER_URL=https://auth.yourdomain.com/application/o/ivy-wallet/
+OIDC_CLIENT_ID=ivy-wallet-app
+OIDC_CLIENT_SECRET=your-oidc-client-secret
+OIDC_REDIRECT_URL=https://wallet.yourdomain.com/api/auth/oidc/callback
+OIDC_PROVIDER_NAME=Authentik SSO
 ```
 
 ---
@@ -136,10 +176,17 @@ Open **`http://localhost:3000`**.
 
 ---
 
-## 📡 REST API & Cloud Sync Endpoints
+## 📡 REST API & Authentication Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/api/auth/config` | `GET` | Get enabled auth methods & OIDC provider info |
+| `/api/auth/oidc/login` | `GET` | Initiate OIDC authorization redirect |
+| `/api/auth/oidc/callback`| `GET` | OIDC Authorization code callback |
+| `/api/auth/login/local` | `POST` | Local email sign-in |
+| `/api/auth/dev-login` | `POST` | Development quick user switcher |
+| `/api/auth/me` | `GET`, `PATCH` | Current authenticated user profile |
+| `/api/auth/logout` | `POST` | Sign out and clear session cookie |
 | `/api/accounts` | `GET`, `POST`, `PUT`, `DELETE` | Manage accounts & calculate live balances |
 | `/api/categories` | `GET`, `POST`, `PUT`, `DELETE` | Manage category tags & icons |
 | `/api/transactions`| `GET`, `POST`, `PUT`, `DELETE` | Expense, Income, Transfer records |

@@ -14,10 +14,12 @@ import {
   Plus,
   Eye,
   EyeOff,
-  RefreshCw,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { cn, isNavActive } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useAuth } from "@/lib/authContext";
 import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
@@ -47,6 +49,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
 }) => {
   const [location] = useLocation();
   const { hideBalance, toggleHideBalance } = useTheme();
+  const { user, logout } = useAuth();
 
   // Prevent background body scroll when drawer is open
   useEffect(() => {
@@ -62,14 +65,14 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSync = async () => {
-    try {
-      const res = await fetch("/api/sync");
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("ivy-data-updated"));
-      }
-    } catch {}
-  };
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "U";
 
   return (
     <div className="fixed inset-0 z-50 md:hidden flex">
@@ -93,6 +96,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
               <h2 className="font-black text-lg text-[var(--text-primary)] tracking-tight">
                 Ivy Wallet
               </h2>
+              <p className="text-[10px] text-[var(--text-muted)]">Multi-User & OIDC</p>
             </div>
           </div>
 
@@ -105,6 +109,42 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
             <X size={20} />
           </button>
         </div>
+
+        {/* User Card in Mobile Drawer */}
+        {user && (
+          <div className="p-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)]/40">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="w-8 h-8 rounded-full object-cover shrink-0 border border-ivy-purple/30"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-ivy-purple to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    {initials}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--text-primary)] truncate">{user.name}</p>
+                  <p className="text-[10px] text-[var(--text-muted)] truncate">{user.email}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  logout();
+                }}
+                title="Sign Out"
+                className="p-1.5 rounded-xl hover:bg-ivy-red/10 text-ivy-red transition-all cursor-pointer shrink-0"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Quick Add Action */}
         <div className="p-3 border-b border-[var(--border-subtle)]">
@@ -169,11 +209,6 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
               </button>
               <ThemeSwitch />
             </div>
-          </div>
-
-          <div className="text-[10px] text-[var(--text-muted)] flex items-center justify-between pt-1">
-            <span>Ivy Wallet • Go + Vite</span>
-            <span className="font-semibold text-ivy-green">100% Offline & Private</span>
           </div>
         </div>
       </div>

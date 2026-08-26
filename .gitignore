@@ -102,6 +102,7 @@ lint/reports/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 .next/
 out/
 .env*.local

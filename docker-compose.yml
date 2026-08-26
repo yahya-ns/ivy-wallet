@@ -14,6 +14,21 @@ services:
       - DB_TYPE=sqlite
       - DATA_DIR=/data
       - DB_PATH=/data/ivy-wallet.db
+
+      # Authentication Configuration
+      - AUTH_ENABLED=true
+      - JWT_SECRET=change-this-to-a-secure-random-string-in-production
+      - LOCAL_AUTH_ENABLED=true
+      - DEV_LOGIN_ENABLED=false
+
+      # --- OIDC / SSO Configuration (Keycloak, Authentik, Authelia, Google, etc.) ---
+      # - OIDC_ENABLED=true
+      # - OIDC_ISSUER_URL=https://auth.example.com/application/o/ivy-wallet/
+      # - OIDC_CLIENT_ID=ivy-wallet-client-id
+      # - OIDC_CLIENT_SECRET=ivy-wallet-client-secret
+      # - OIDC_REDIRECT_URL=https://wallet.example.com/api/auth/oidc/callback
+      # - OIDC_PROVIDER_NAME=Single Sign-On (OIDC)
+      # - OIDC_SCOPES=openid profile email
       
       # --- For PostgreSQL (uncomment if using PostgreSQL) ---
       # - DB_TYPE=postgres

@@ -4,6 +4,7 @@ import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
 import { Eye, EyeOff, Plus } from "lucide-react";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { SyncStatusBadge } from "@/components/ui/SyncStatusBadge";
+import { UserProfileMenu } from "./UserProfileMenu";
 
 interface HeaderProps {
   onQuickAdd: () => void;
@@ -42,8 +43,12 @@ export const Header: React.FC<HeaderProps> = ({ onQuickAdd }) => {
           <Plus size={16} className="stroke-[2.5]" />
           <span>Add Transaction</span>
         </IvyButton>
+
+        {/* User Profile Dropdown */}
+        <div className="pl-2 border-l border-[var(--border-subtle)]">
+          <UserProfileMenu />
+        </div>
       </div>
     </header>
   );
 };
-

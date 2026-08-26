@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -19,15 +20,17 @@ type LoanHandler struct {
 }
 
 func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	rows, err := h.DB.Query(`
-		SELECT l.id, l.name, l.amount, l.type, l.color, l.icon, l.account_id, l.note,
+		SELECT l.id, l.user_id, l.name, l.amount, l.type, l.color, l.icon, l.account_id, l.note,
 		       l.date_time, l.due_date, l.is_paid, l.is_deleted, l.created_at, l.updated_at,
 		       a.name, a.currency, a.color, a.icon
 		FROM loans l
 		LEFT JOIN accounts a ON l.account_id = a.id
-		WHERE l.is_deleted = 0
+		WHERE l.user_id = ? AND l.is_deleted = 0
 		ORDER BY l.date_time DESC
-	`)
+	`, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -43,7 +46,7 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		var aName, aCurr, aColor, aIcon sql.NullString
 
 		if err := rows.Scan(
-			&l.ID, &l.Name, &l.Amount, &l.Type, &l.Color, &l.Icon, &accID, &note,
+			&l.ID, &l.UserID, &l.Name, &l.Amount, &l.Type, &l.Color, &l.Icon, &accID, &note,
 			&l.DateTime, &dueDate, &isPaid, &isDel, &l.CreatedAt, &l.UpdatedAt,
 			&aName, &aCurr, &aColor, &aIcon,
 		); err != nil {
@@ -66,6 +69,7 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		if accID.Valid && aName.Valid {
 			l.Account = &models.Account{
 				ID:       accID.String,
+				UserID:   l.UserID,
 				Name:     aName.String,
 				Currency: aCurr.String,
 				Color:    aColor.String,
@@ -73,15 +77,15 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Fetch loan repayment records
+		// Fetch loan repayment records for this user
 		recRows, err := h.DB.Query(`
-			SELECT lr.id, lr.loan_id, lr.amount, lr.date_time, lr.note, lr.account_id, lr.transaction_id, lr.created_at, lr.updated_at,
+			SELECT lr.id, lr.user_id, lr.loan_id, lr.amount, lr.date_time, lr.note, lr.account_id, lr.transaction_id, lr.created_at, lr.updated_at,
 			       a.name, a.currency, a.color, a.icon
 			FROM loan_records lr
 			LEFT JOIN accounts a ON lr.account_id = a.id
-			WHERE lr.loan_id = ?
+			WHERE lr.loan_id = ? AND lr.user_id = ?
 			ORDER BY lr.date_time DESC
-		`, l.ID)
+		`, l.ID, userID)
 
 		var totalPaid float64 = 0
 		if err == nil {
@@ -91,7 +95,7 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 				var lrAName, lrACurr, lrAColor, lrAIcon sql.NullString
 
 				_ = recRows.Scan(
-					&lr.ID, &lr.LoanId, &lr.Amount, &lr.DateTime, &lrNote, &lrAccID, &lrTxID, &lr.CreatedAt, &lr.UpdatedAt,
+					&lr.ID, &lr.UserID, &lr.LoanId, &lr.Amount, &lr.DateTime, &lrNote, &lrAccID, &lrTxID, &lr.CreatedAt, &lr.UpdatedAt,
 					&lrAName, &lrACurr, &lrAColor, &lrAIcon,
 				)
 
@@ -107,6 +111,7 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 				if lrAccID.Valid && lrAName.Valid {
 					lr.Account = &models.Account{
 						ID:       lrAccID.String,
+						UserID:   lr.UserID,
 						Name:     lrAName.String,
 						Currency: lrACurr.String,
 						Color:    lrAColor.String,
@@ -130,10 +135,12 @@ func (h *LoanHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(loans)
+	_ = json.NewEncoder(w).Encode(loans)
 }
 
 func (h *LoanHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var input struct {
 		Name              string   `json:"name"`
 		Amount            float64  `json:"amount"`
@@ -187,9 +194,9 @@ func (h *LoanHandler) Create(w http.ResponseWriter, r *http.Request) {
 	amount := math.Abs(input.Amount)
 
 	_, err := h.DB.Exec(`
-		INSERT INTO loans (id, name, amount, type, color, icon, account_id, note, date_time, due_date, is_paid, is_deleted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
-	`, id, input.Name, amount, loanType, input.Color, input.Icon, input.AccountId, input.Note, dt, parsedDueDate, now, now)
+		INSERT INTO loans (id, user_id, name, amount, type, color, icon, account_id, note, date_time, due_date, is_paid, is_deleted, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+	`, id, userID, input.Name, amount, loanType, input.Color, input.Icon, input.AccountId, input.Note, dt, parsedDueDate, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -206,13 +213,14 @@ func (h *LoanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, _ = h.DB.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, title, description, date_time, loan_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, uuid.NewString(), *input.AccountId, txType, amount, title, input.Note, dt, id, now, now)
+			INSERT INTO transactions (id, user_id, account_id, type, amount, title, description, date_time, loan_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, uuid.NewString(), userID, *input.AccountId, txType, amount, title, input.Note, dt, id, now, now)
 	}
 
 	l := models.Loan{
 		ID:              id,
+		UserID:          userID,
 		Name:            input.Name,
 		Amount:          amount,
 		Type:            loanType,
@@ -230,10 +238,11 @@ func (h *LoanHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(l)
+	_ = json.NewEncoder(w).Encode(l)
 }
 
 func (h *LoanHandler) Update(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	var input struct {
 		Name      *string  `json:"name"`
@@ -261,8 +270,8 @@ func (h *LoanHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	err := h.DB.QueryRow(`
 		SELECT name, amount, type, color, icon, account_id, note, due_date, is_paid
-		FROM loans WHERE id = ?
-	`, id).Scan(&name, &amount, &loanType, &color, &icon, &accID, &note, &dueDate, &isPaid)
+		FROM loans WHERE id = ? AND user_id = ?
+	`, id, userID).Scan(&name, &amount, &loanType, &color, &icon, &accID, &note, &dueDate, &isPaid)
 
 	if err != nil {
 		http.Error(w, "Loan record not found", http.StatusNotFound)
@@ -309,8 +318,8 @@ func (h *LoanHandler) Update(w http.ResponseWriter, r *http.Request) {
 	_, err = h.DB.Exec(`
 		UPDATE loans
 		SET name = ?, amount = ?, type = ?, color = ?, icon = ?, account_id = ?, note = ?, due_date = ?, is_paid = ?, updated_at = ?
-		WHERE id = ?
-	`, name, amount, loanType, color, icon, accID, note, dueDate, isPaid, now, id)
+		WHERE id = ? AND user_id = ?
+	`, name, amount, loanType, color, icon, accID, note, dueDate, isPaid, now, id, userID)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -318,8 +327,9 @@ func (h *LoanHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":        id,
+		"userId":    userID,
 		"name":      name,
 		"amount":    amount,
 		"type":      loanType,
@@ -331,20 +341,22 @@ func (h *LoanHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LoanHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	id := chi.URLParam(r, "id")
 	now := time.Now().UTC()
 
-	_, err := h.DB.Exec(`UPDATE loans SET is_deleted = 1, updated_at = ? WHERE id = ?`, now, id)
+	_, err := h.DB.Exec(`UPDATE loans SET is_deleted = 1, updated_at = ? WHERE id = ? AND user_id = ?`, now, id, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	_ = json.NewEncoder(w).Encode(map[string]bool{"success": true})
 }
 
 func (h *LoanHandler) AddRepayment(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	loanId := chi.URLParam(r, "id")
 	var input struct {
 		Amount            float64 `json:"amount"`
@@ -361,7 +373,7 @@ func (h *LoanHandler) AddRepayment(w http.ResponseWriter, r *http.Request) {
 
 	var loanName, loanType string
 	var loanAmount float64
-	err := h.DB.QueryRow(`SELECT name, type, amount FROM loans WHERE id = ?`, loanId).Scan(&loanName, &loanType, &loanAmount)
+	err := h.DB.QueryRow(`SELECT name, type, amount FROM loans WHERE id = ? AND user_id = ?`, loanId, userID).Scan(&loanName, &loanType, &loanAmount)
 	if err != nil {
 		http.Error(w, "Loan not found", http.StatusNotFound)
 		return
@@ -387,16 +399,16 @@ func (h *LoanHandler) AddRepayment(w http.ResponseWriter, r *http.Request) {
 
 		txID := uuid.NewString()
 		_, _ = h.DB.Exec(`
-			INSERT INTO transactions (id, account_id, type, amount, title, description, date_time, loan_id, loan_record_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, txID, *input.AccountId, txType, input.Amount, title, input.Note, dt, loanId, id, now, now)
+			INSERT INTO transactions (id, user_id, account_id, type, amount, title, description, date_time, loan_id, loan_record_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, txID, userID, *input.AccountId, txType, input.Amount, title, input.Note, dt, loanId, id, now, now)
 		createdTxID = &txID
 	}
 
 	_, err = h.DB.Exec(`
-		INSERT INTO loan_records (id, loan_id, amount, date_time, note, account_id, transaction_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, loanId, input.Amount, dt, input.Note, input.AccountId, createdTxID, now, now)
+		INSERT INTO loan_records (id, user_id, loan_id, amount, date_time, note, account_id, transaction_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, userID, loanId, input.Amount, dt, input.Note, input.AccountId, createdTxID, now, now)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -405,13 +417,14 @@ func (h *LoanHandler) AddRepayment(w http.ResponseWriter, r *http.Request) {
 
 	// Recalculate total paid
 	var totalPaid float64
-	_ = h.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM loan_records WHERE loan_id = ?`, loanId).Scan(&totalPaid)
+	_ = h.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM loan_records WHERE loan_id = ? AND user_id = ?`, loanId, userID).Scan(&totalPaid)
 	if totalPaid >= loanAmount {
-		_, _ = h.DB.Exec(`UPDATE loans SET is_paid = 1, updated_at = ? WHERE id = ?`, now, loanId)
+		_, _ = h.DB.Exec(`UPDATE loans SET is_paid = 1, updated_at = ? WHERE id = ? AND user_id = ?`, now, loanId, userID)
 	}
 
 	rec := models.LoanRecord{
 		ID:            id,
+		UserID:        userID,
 		LoanId:        loanId,
 		Amount:        input.Amount,
 		DateTime:      dt,
@@ -424,5 +437,5 @@ func (h *LoanHandler) AddRepayment(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rec)
+	_ = json.NewEncoder(w).Encode(rec)
 }

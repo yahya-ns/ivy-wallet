@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,16 +10,33 @@ import (
 )
 
 type DatabaseConfig struct {
-	Type     string // "sqlite", "postgres", "mariadb" / "mysql"
-	DSN      string // Connection string / Data Source Name
-	Path     string // For SQLite only
+	Type string // "sqlite", "postgres", "mariadb" / "mysql"
+	DSN  string // Connection string / Data Source Name
+	Path string // For SQLite only
+}
+
+type AuthConfig struct {
+	Enabled          bool
+	JWTSecret        string
+	SessionCookie    string
+	OIDCEnabled      bool
+	OIDCIssuerURL    string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
+	OIDCScopes       []string
+	OIDCProviderName string
+	LocalAuthEnabled bool
+	DevLoginEnabled  bool
 }
 
 type Config struct {
 	Port     string
 	DataDir  string
 	DB       DatabaseConfig
+	Auth     AuthConfig
 	CORSOrig string
+	AppURL   string
 }
 
 func Load() *Config {
@@ -35,6 +54,8 @@ func Load() *Config {
 	if corsOrig == "" {
 		corsOrig = "*"
 	}
+
+	appURL := strings.TrimRight(getEnvOrDefault("APP_URL", fmt.Sprintf("http://localhost:%s", port)), "/")
 
 	dbType := strings.ToLower(strings.TrimSpace(os.Getenv("DB_TYPE")))
 	if dbType == "" {
@@ -95,11 +116,52 @@ func Load() *Config {
 		dbConfig.DSN = dbPath
 	}
 
+	// Auth Configuration
+	authEnabled := getEnvBool("AUTH_ENABLED", true)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		// Generate random secret if not provided
+		bytes := make([]byte, 32)
+		_, _ = rand.Read(bytes)
+		jwtSecret = hex.EncodeToString(bytes)
+	}
+
+	oidcIssuer := os.Getenv("OIDC_ISSUER_URL")
+	oidcClientID := os.Getenv("OIDC_CLIENT_ID")
+	oidcClientSecret := os.Getenv("OIDC_CLIENT_SECRET")
+	oidcRedirectURL := getEnvOrDefault("OIDC_REDIRECT_URL", fmt.Sprintf("%s/api/auth/oidc/callback", appURL))
+	oidcProviderName := getEnvOrDefault("OIDC_PROVIDER_NAME", "Single Sign-On (OIDC)")
+
+	oidcScopesStr := getEnvOrDefault("OIDC_SCOPES", "openid profile email")
+	oidcScopes := strings.Fields(oidcScopesStr)
+
+	// OIDC is enabled if explicitly true or if OIDC_ISSUER_URL is configured
+	oidcEnabled := getEnvBool("OIDC_ENABLED", oidcIssuer != "")
+	localAuthEnabled := getEnvBool("LOCAL_AUTH_ENABLED", true)
+	devLoginEnabled := getEnvBool("DEV_LOGIN_ENABLED", true)
+
+	authConfig := AuthConfig{
+		Enabled:          authEnabled,
+		JWTSecret:        jwtSecret,
+		SessionCookie:    getEnvOrDefault("SESSION_COOKIE_NAME", "ivy_session"),
+		OIDCEnabled:      oidcEnabled,
+		OIDCIssuerURL:    oidcIssuer,
+		OIDCClientID:     oidcClientID,
+		OIDCClientSecret: oidcClientSecret,
+		OIDCRedirectURL:  oidcRedirectURL,
+		OIDCScopes:       oidcScopes,
+		OIDCProviderName: oidcProviderName,
+		LocalAuthEnabled: localAuthEnabled,
+		DevLoginEnabled:  devLoginEnabled,
+	}
+
 	return &Config{
 		Port:     port,
 		DataDir:  dataDir,
 		DB:       dbConfig,
+		Auth:     authConfig,
 		CORSOrig: corsOrig,
+		AppURL:   appURL,
 	}
 }
 
@@ -108,4 +170,12 @@ func getEnvOrDefault(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	val := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if val == "" {
+		return fallback
+	}
+	return val == "true" || val == "1" || val == "yes" || val == "on"
 }

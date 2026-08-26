@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/database"
+	"github.com/yahya-ns/ivy-wallet/backend/internal/middleware"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
 )
 
@@ -19,6 +20,7 @@ type BackupHandler struct {
 }
 
 func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	format := r.URL.Query().Get("format")
 
 	if format == "csv" {
@@ -36,9 +38,9 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN accounts a ON t.account_id = a.id
 			LEFT JOIN categories c ON t.category_id = c.id
 			LEFT JOIN categories sc ON t.subcategory_id = sc.id
-			WHERE t.is_deleted = 0
+			WHERE t.user_id = ? AND t.is_deleted = 0
 			ORDER BY t.date_time DESC
-		`)
+		`, userID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -57,13 +59,13 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 	// JSON Export
 	// 1. Accounts
-	accRows, _ := h.DB.Query("SELECT id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at FROM accounts WHERE is_deleted = 0")
+	accRows, _ := h.DB.Query("SELECT id, user_id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at FROM accounts WHERE user_id = ? AND is_deleted = 0", userID)
 	accounts := []models.Account{}
 	if accRows != nil {
 		for accRows.Next() {
 			var a models.Account
 			var incInBal int
-			_ = accRows.Scan(&a.ID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &a.CreatedAt, &a.UpdatedAt)
+			_ = accRows.Scan(&a.ID, &a.UserID, &a.Name, &a.Currency, &a.Color, &a.Icon, &a.OrderNum, &incInBal, &a.CreatedAt, &a.UpdatedAt)
 			a.IncludeInBalance = incInBal == 1
 			accounts = append(accounts, a)
 		}
@@ -71,13 +73,13 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Categories
-	catRows, _ := h.DB.Query("SELECT id, name, color, icon, order_num, parent_id, created_at, updated_at FROM categories WHERE is_deleted = 0")
+	catRows, _ := h.DB.Query("SELECT id, user_id, name, color, icon, order_num, parent_id, created_at, updated_at FROM categories WHERE user_id = ? AND is_deleted = 0", userID)
 	categories := []models.Category{}
 	if catRows != nil {
 		for catRows.Next() {
 			var c models.Category
 			var parentID sql.NullString
-			_ = catRows.Scan(&c.ID, &c.Name, &c.Color, &c.Icon, &c.OrderNum, &parentID, &c.CreatedAt, &c.UpdatedAt)
+			_ = catRows.Scan(&c.ID, &c.UserID, &c.Name, &c.Color, &c.Icon, &c.OrderNum, &parentID, &c.CreatedAt, &c.UpdatedAt)
 			if parentID.Valid && parentID.String != "" {
 				c.ParentId = &parentID.String
 			}
@@ -87,26 +89,26 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2.5 Tags
-	tagRows, _ := h.DB.Query("SELECT id, name, color, order_num, created_at, updated_at FROM tags WHERE is_deleted = 0")
+	tagRows, _ := h.DB.Query("SELECT id, user_id, name, color, order_num, created_at, updated_at FROM tags WHERE user_id = ? AND is_deleted = 0", userID)
 	tags := []models.Tag{}
 	if tagRows != nil {
 		for tagRows.Next() {
 			var tg models.Tag
-			_ = tagRows.Scan(&tg.ID, &tg.Name, &tg.Color, &tg.OrderNum, &tg.CreatedAt, &tg.UpdatedAt)
+			_ = tagRows.Scan(&tg.ID, &tg.UserID, &tg.Name, &tg.Color, &tg.OrderNum, &tg.CreatedAt, &tg.UpdatedAt)
 			tags = append(tags, tg)
 		}
 		tagRows.Close()
 	}
 
 	// 3. Transactions
-	txRows, _ := h.DB.Query("SELECT id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, created_at, updated_at FROM transactions WHERE is_deleted = 0 ORDER BY date_time DESC")
+	txRows, _ := h.DB.Query("SELECT id, user_id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, created_at, updated_at FROM transactions WHERE user_id = ? AND is_deleted = 0 ORDER BY date_time DESC", userID)
 	transactions := []models.Transaction{}
 	if txRows != nil {
 		for txRows.Next() {
 			var t models.Transaction
 			var toAccID, title, desc, catID, subcatID sql.NullString
 			var toAmt sql.NullFloat64
-			_ = txRows.Scan(&t.ID, &t.AccountId, &t.Type, &t.Amount, &toAccID, &toAmt, &title, &desc, &t.DateTime, &catID, &subcatID, &t.CreatedAt, &t.UpdatedAt)
+			_ = txRows.Scan(&t.ID, &t.UserID, &t.AccountId, &t.Type, &t.Amount, &toAccID, &toAmt, &title, &desc, &t.DateTime, &catID, &subcatID, &t.CreatedAt, &t.UpdatedAt)
 			if toAccID.Valid {
 				t.ToAccountId = &toAccID.String
 			}
@@ -131,13 +133,13 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Budgets
-	bRows, _ := h.DB.Query("SELECT id, name, amount, category_ids, period, order_id, created_at, updated_at FROM budgets")
+	bRows, _ := h.DB.Query("SELECT id, user_id, name, amount, category_ids, period, order_id, created_at, updated_at FROM budgets WHERE user_id = ?", userID)
 	budgets := []models.Budget{}
 	if bRows != nil {
 		for bRows.Next() {
 			var b models.Budget
 			var catIDs sql.NullString
-			_ = bRows.Scan(&b.ID, &b.Name, &b.Amount, &catIDs, &b.Period, &b.OrderId, &b.CreatedAt, &b.UpdatedAt)
+			_ = bRows.Scan(&b.ID, &b.UserID, &b.Name, &b.Amount, &catIDs, &b.Period, &b.OrderId, &b.CreatedAt, &b.UpdatedAt)
 			if catIDs.Valid {
 				b.CategoryIds = &catIDs.String
 			}
@@ -150,8 +152,8 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 	var s models.Settings
 	var hideBal int
 	var dateFormat, timeFormat sql.NullString
-	_ = h.DB.QueryRow("SELECT id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at FROM settings LIMIT 1").
-		Scan(&s.ID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
+	_ = h.DB.QueryRow("SELECT id, user_id, theme, currency, buffer_amount, name, first_day_of_week, hide_balance, date_format, time_format, created_at, updated_at FROM settings WHERE user_id = ? LIMIT 1", userID).
+		Scan(&s.ID, &s.UserID, &s.Theme, &s.Currency, &s.BufferAmount, &s.Name, &s.FirstDayOfWeek, &hideBal, &dateFormat, &timeFormat, &s.CreatedAt, &s.UpdatedAt)
 	s.HideBalance = hideBal == 1
 	if dateFormat.Valid && dateFormat.String != "" {
 		s.DateFormat = dateFormat.String
@@ -177,10 +179,12 @@ func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"ivy_wallet_backup_%d.json\"", time.Now().Unix()))
-	json.NewEncoder(w).Encode(backup)
+	_ = json.NewEncoder(w).Encode(backup)
 }
 
 func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
 	var data struct {
 		Categories   []models.Category    `json:"categories"`
 		Tags         []models.Tag         `json:"tags"`
@@ -203,16 +207,16 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 	for _, c := range data.Categories {
 		if c.Name != "" {
 			var exists int
-			_ = h.DB.QueryRow("SELECT COUNT(*) FROM categories WHERE name = ?", c.Name).Scan(&exists)
+			_ = h.DB.QueryRow("SELECT COUNT(*) FROM categories WHERE name = ? AND user_id = ?", c.Name, userID).Scan(&exists)
 			if exists == 0 {
 				id := c.ID
 				if id == "" {
 					id = uuid.NewString()
 				}
 				_, _ = h.DB.Exec(`
-					INSERT INTO categories (id, name, color, icon, order_num, parent_id, created_at, updated_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				`, id, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, now, now)
+					INSERT INTO categories (id, user_id, name, color, icon, order_num, parent_id, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, userID, c.Name, c.Color, c.Icon, c.OrderNum, c.ParentId, now, now)
 				importedCat++
 			}
 		}
@@ -222,16 +226,16 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 	for _, tg := range data.Tags {
 		if tg.Name != "" {
 			var exists int
-			_ = h.DB.QueryRow("SELECT COUNT(*) FROM tags WHERE LOWER(name) = LOWER(?)", tg.Name).Scan(&exists)
+			_ = h.DB.QueryRow("SELECT COUNT(*) FROM tags WHERE LOWER(name) = LOWER(?) AND user_id = ?", tg.Name, userID).Scan(&exists)
 			if exists == 0 {
 				id := tg.ID
 				if id == "" {
 					id = uuid.NewString()
 				}
 				_, _ = h.DB.Exec(`
-					INSERT INTO tags (id, name, color, order_num, created_at, updated_at)
-					VALUES (?, ?, ?, ?, ?, ?)
-				`, id, tg.Name, tg.Color, tg.OrderNum, now, now)
+					INSERT INTO tags (id, user_id, name, color, order_num, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+				`, id, userID, tg.Name, tg.Color, tg.OrderNum, now, now)
 				importedTag++
 			}
 		}
@@ -241,7 +245,7 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 	for _, a := range data.Accounts {
 		if a.Name != "" {
 			var exists int
-			_ = h.DB.QueryRow("SELECT COUNT(*) FROM accounts WHERE name = ?", a.Name).Scan(&exists)
+			_ = h.DB.QueryRow("SELECT COUNT(*) FROM accounts WHERE name = ? AND user_id = ?", a.Name, userID).Scan(&exists)
 			if exists == 0 {
 				id := a.ID
 				if id == "" {
@@ -252,9 +256,9 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 					incInBal = 0
 				}
 				_, _ = h.DB.Exec(`
-					INSERT INTO accounts (id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, id, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, now, now)
+					INSERT INTO accounts (id, user_id, name, currency, color, icon, order_num, include_in_balance, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, userID, a.Name, a.Currency, a.Color, a.Icon, a.OrderNum, incInBal, now, now)
 				importedAcc++
 			}
 		}
@@ -271,10 +275,18 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 			if dt.IsZero() {
 				dt = now
 			}
-			_, err := h.DB.Exec(`
-				INSERT OR IGNORE INTO transactions (id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, id, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, dt, t.CategoryId, t.SubcategoryId, now, now)
+			var err error
+			if h.DB.Driver == "mariadb" {
+				_, err = h.DB.Exec(`
+					INSERT IGNORE INTO transactions (id, user_id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, userID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, dt, t.CategoryId, t.SubcategoryId, now, now)
+			} else {
+				_, err = h.DB.Exec(`
+					INSERT OR IGNORE INTO transactions (id, user_id, account_id, type, amount, to_account_id, to_amount, title, description, date_time, category_id, subcategory_id, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, id, userID, t.AccountId, t.Type, t.Amount, t.ToAccountId, t.ToAmount, t.Title, t.Description, dt, t.CategoryId, t.SubcategoryId, now, now)
+			}
 			if err == nil {
 				importedTx++
 			}
@@ -282,7 +294,7 @@ func (h *BackupHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": fmt.Sprintf("Imported %d categories, %d tags, %d accounts, and %d transactions.", importedCat, importedTag, importedAcc, importedTx),
 	})
