@@ -94,3 +94,16 @@ export function formatRelativeDate(
   return formatDate(d, dateFormat);
 }
 
+export function isNavActive(currentLocation: string, href: string): boolean {
+  if (href === "/") {
+    return currentLocation === "/";
+  }
+  if (href === "/accounts") {
+    return currentLocation.startsWith("/accounts");
+  }
+  if (href === "/categories") {
+    return currentLocation.startsWith("/categories") || currentLocation.startsWith("/tags");
+  }
+  return currentLocation.startsWith(href);
+}
+

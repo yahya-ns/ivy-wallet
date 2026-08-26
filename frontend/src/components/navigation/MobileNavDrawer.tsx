@@ -16,7 +16,7 @@ import {
   EyeOff,
   RefreshCw,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isNavActive } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
 import { IvyButton } from "@/components/ui/IvyButton";
@@ -124,7 +124,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
         {/* Nav Links */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {NAV_ITEMS.map((item) => {
-            const isActive = location === item.href;
+            const isActive = isNavActive(location, item.href);
             const Icon = item.icon;
 
             return (

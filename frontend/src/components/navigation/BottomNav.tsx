@@ -2,13 +2,12 @@ import React from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
-  ArrowLeftRight,
   Wallet,
   Tags,
   Plus,
   Menu,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isNavActive } from "@/lib/utils";
 
 interface BottomNavProps {
   onQuickAdd: () => void;
@@ -59,7 +58,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMe
             );
           }
 
-          const isActive = location === item.href;
+          const isActive = item.href ? isNavActive(location, item.href) : false;
           const Icon = item.icon;
 
           return (
@@ -82,3 +81,4 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMe
     </div>
   );
 };
+

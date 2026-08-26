@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { Transaction } from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyIcon } from "@/components/ui/IvyIcon";
-import { ArrowLeftRight, Trash2, Edit2 } from "lucide-react";
+import { ArrowLeftRight, Trash2 } from "lucide-react";
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -246,7 +246,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           </div>
         </div>
 
-        {/* Amount & Actions */}
+        {/* Amount */}
         <div className="flex items-center gap-3 shrink-0">
           <span className={`text-sm sm:text-base font-extrabold ${getAmountColor()}`}>
             {hideBalance
@@ -256,36 +256,6 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
                   transaction.account?.currency || currency
                 )}`}
           </span>
-
-          {/* Action buttons on hover (desktop convenience) */}
-          <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {onEdit && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(transaction);
-                }}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                title="Edit Transaction"
-              >
-                <Edit2 size={14} />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(transaction.id);
-                }}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                title="Delete Transaction"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </div>

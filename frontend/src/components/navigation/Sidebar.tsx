@@ -11,7 +11,7 @@ import {
   BarChart3,
   Settings,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isNavActive } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -48,7 +48,7 @@ export const Sidebar: React.FC = () => {
       {/* Nav List */}
       <nav className="flex-1 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
-          const isActive = location === item.href;
+          const isActive = isNavActive(location, item.href);
           const Icon = item.icon;
 
           return (

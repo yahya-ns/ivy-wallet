@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Tag } from "@/lib/types";
 import { COLOR_OPTIONS } from "@/lib/constants";
-import { Tag as TagIcon, X, Plus, Check } from "lucide-react";
+import { X, Plus, Check } from "lucide-react";
 
 interface TagInputProps {
   selectedTagIds: string[];
@@ -21,7 +22,16 @@ export const TagInput: React.FC<TagInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [popoverCoords, setPopoverCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    placement: "top" | "bottom";
+  } | null>(null);
 
   const fetchTags = async () => {
     try {
@@ -39,14 +49,71 @@ export const TagInput: React.FC<TagInputProps> = ({
     fetchTags();
   }, []);
 
+  const updatePosition = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const popoverWidth = Math.min(Math.max(rect.width, 260), window.innerWidth - 32);
+    const popoverHeight = 240; // Estimated max height for suggestions
+
+    // Horizontal alignment
+    let left = rect.left;
+    if (left + popoverWidth > window.innerWidth - 16) {
+      left = window.innerWidth - 16 - popoverWidth;
+    }
+    if (left < 16) left = 16;
+
+    // Check vertical space
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow < popoverHeight && spaceAbove > spaceBelow) {
+      setPopoverCoords({
+        bottom: window.innerHeight - rect.top + 6,
+        left,
+        width: popoverWidth,
+        placement: "top",
+      });
+    } else {
+      setPopoverCoords({
+        top: rect.bottom + 6,
+        left,
+        width: popoverWidth,
+        placement: "bottom",
+      });
+    }
+  }, []);
+
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    if (isOpen) {
+      updatePosition();
+      const handleScrollOrResize = () => updatePosition();
+      window.addEventListener("scroll", handleScrollOrResize, true);
+      window.addEventListener("resize", handleScrollOrResize);
+      return () => {
+        window.removeEventListener("scroll", handleScrollOrResize, true);
+        window.removeEventListener("resize", handleScrollOrResize);
+      };
+    }
+  }, [isOpen, updatePosition, selectedTagIds]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        popoverRef.current &&
+        !popoverRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, []);
 
   const cleanQuery = inputValue.trim().replace(/^#+/, "");
@@ -133,8 +200,75 @@ export const TagInput: React.FC<TagInputProps> = ({
     }
   };
 
+  const popoverContent = isOpen && popoverCoords && (
+    <div
+      ref={popoverRef}
+      style={{
+        position: "fixed",
+        top: popoverCoords.top !== undefined ? `${popoverCoords.top}px` : undefined,
+        bottom: popoverCoords.bottom !== undefined ? `${popoverCoords.bottom}px` : undefined,
+        left: `${popoverCoords.left}px`,
+        width: `${popoverCoords.width}px`,
+        zIndex: 9999,
+      }}
+      className={`bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-2xl p-1.5 space-y-1 max-h-56 overflow-y-auto backdrop-blur-xl ${
+        popoverCoords.placement === "top"
+          ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
+          : "animate-in fade-in slide-in-from-top-2 duration-150"
+      }`}
+    >
+      {cleanQuery && !exactMatch && (
+        <button
+          type="button"
+          disabled={isCreating}
+          onClick={() => handleCreateNewTag(cleanQuery)}
+          className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left text-xs font-bold text-ivy-purple bg-ivy-purple/10 hover:bg-ivy-purple/15 border border-ivy-purple/20 transition-all cursor-pointer"
+        >
+          <Plus size={15} className="stroke-[3]" />
+          <span>Create tag "#{cleanQuery}"</span>
+        </button>
+      )}
+
+      {filteredTags.length === 0 && !cleanQuery ? (
+        <div className="p-3 text-center text-xs text-[var(--text-muted)]">
+          No tags available. Type a name to create one!
+        </div>
+      ) : (
+        filteredTags.map((tag) => {
+          const isSelected = selectedTagIds.includes(tag.id);
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => handleToggleTag(tag.id)}
+              className={`w-full flex items-center justify-between gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-all duration-150 ${
+                isSelected
+                  ? "bg-ivy-purple/10 border border-ivy-purple/30 text-[var(--text-primary)] font-bold"
+                  : "hover:bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] border border-transparent"
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                  style={{ backgroundColor: tag.color }}
+                />
+                <span className="text-xs font-bold truncate">#{tag.name}</span>
+              </div>
+
+              {isSelected && (
+                <div className="shrink-0 pl-1">
+                  <Check size={14} className="text-ivy-purple stroke-[3]" />
+                </div>
+              )}
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative">
       {label && (
         <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
           {label}
@@ -143,6 +277,7 @@ export const TagInput: React.FC<TagInputProps> = ({
 
       {/* Input container with chips */}
       <div
+        ref={containerRef}
         onClick={() => {
           inputRef.current?.focus();
           setIsOpen(true);
@@ -193,58 +328,8 @@ export const TagInput: React.FC<TagInputProps> = ({
         />
       </div>
 
-      {/* Dropdown suggestions */}
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-2xl p-1.5 space-y-1 max-h-56 overflow-y-auto backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
-          {cleanQuery && !exactMatch && (
-            <button
-              type="button"
-              disabled={isCreating}
-              onClick={() => handleCreateNewTag(cleanQuery)}
-              className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left text-xs font-bold text-ivy-purple bg-ivy-purple/10 hover:bg-ivy-purple/15 border border-ivy-purple/20 transition-all cursor-pointer"
-            >
-              <Plus size={15} className="stroke-[3]" />
-              <span>Create tag "#{cleanQuery}"</span>
-            </button>
-          )}
-
-          {filteredTags.length === 0 && !cleanQuery ? (
-            <div className="p-3 text-center text-xs text-[var(--text-muted)]">
-              No tags available. Type a name to create one!
-            </div>
-          ) : (
-            filteredTags.map((tag) => {
-              const isSelected = selectedTagIds.includes(tag.id);
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => handleToggleTag(tag.id)}
-                  className={`w-full flex items-center justify-between gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-all duration-150 ${
-                    isSelected
-                      ? "bg-ivy-purple/10 border border-ivy-purple/30 text-[var(--text-primary)] font-bold"
-                      : "hover:bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span className="text-xs font-bold truncate">#{tag.name}</span>
-                  </div>
-
-                  {isSelected && (
-                    <div className="shrink-0 pl-1">
-                      <Check size={14} className="text-ivy-purple stroke-[3]" />
-                    </div>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+      {/* Portal Dropdown suggestions */}
+      {typeof document !== "undefined" && popoverContent && createPortal(popoverContent, document.body)}
     </div>
   );
 };
