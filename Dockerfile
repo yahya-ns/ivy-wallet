@@ -2,8 +2,8 @@
 # Ivy Wallet - Ultra-lightweight Single Binary Container (Go + Vite SPA)
 # ==============================================================================
 
-# Stage 1: Build Frontend SPA
-FROM node:22-alpine AS frontend-builder
+# Stage 1: Build Frontend SPA (Native build platform)
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package.json frontend/package-lock.json* ./
@@ -12,9 +12,12 @@ RUN npm ci || npm install
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Build Go Single Static Binary
-FROM golang:1.24-alpine AS backend-builder
+# Stage 2: Build Go Single Static Binary (Native build platform with Go cross-compilation)
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
+
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN apk add --no-cache ca-certificates tzdata
 
@@ -27,8 +30,8 @@ COPY backend/ ./
 # Copy built frontend assets into Go embed path
 COPY --from=frontend-builder /app/backend/cmd/server/dist ./cmd/server/dist
 
-# Compile pure static binary with maximum stripping
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# Compile pure static binary with native Go cross-compilation
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w -extldflags '-static'" \
     -o /app/ivy-wallet ./cmd/server
