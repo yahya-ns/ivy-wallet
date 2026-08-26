@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - web-app
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
