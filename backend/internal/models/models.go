@@ -3,32 +3,45 @@ package models
 import "time"
 
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	AvatarURL string    `json:"avatarUrl,omitempty"`
-	Provider  string    `json:"provider"` // "oidc", "local", "dev"
-	Subject   string    `json:"subject,omitempty"`  // OIDC 'sub'
-	Role      string    `json:"role"`     // "admin", "user"
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	Name         string    `json:"name"`
+	AvatarURL    string    `json:"avatarUrl,omitempty"`
+	Provider     string    `json:"provider"` // "oidc", "local", "dev"
+	Subject      string    `json:"subject,omitempty"`  // OIDC 'sub'
+	Role         string    `json:"role"`     // "admin", "user"
+	PasswordHash string    `json:"-"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type AuthConfigResponse struct {
-	AuthEnabled      bool   `json:"authEnabled"`
-	OIDCEnabled      bool   `json:"oidcEnabled"`
-	OIDCProviderName string `json:"oidcProviderName"`
-	LocalAuthEnabled bool   `json:"localAuthEnabled"`
-	DevLoginEnabled  bool   `json:"devLoginEnabled"`
+	AuthEnabled       bool   `json:"authEnabled"`
+	OIDCEnabled       bool   `json:"oidcEnabled"`
+	OIDCProviderName  string `json:"oidcProviderName"`
+	LocalAuthEnabled  bool   `json:"localAuthEnabled"`
+	AllowRegistration bool   `json:"allowRegistration"`
+	DevLoginEnabled   bool   `json:"devLoginEnabled"`
 }
 
 type AuthMeResponse struct {
 	User *User `json:"user"`
 }
 
-type LocalLoginRequest struct {
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"oldPassword"`
+	NewPassword string `json:"newPassword"`
 }
 
 type DevLoginRequest struct {

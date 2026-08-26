@@ -76,7 +76,10 @@ Ivy Wallet features a robust multi-user authentication system supporting both Op
 | `OIDC_REDIRECT_URL` | `http://localhost:3000/api/auth/oidc/callback` | Authorized redirect callback URL |
 | `OIDC_SCOPES` | `openid profile email` | Scopes requested from the identity provider |
 | `OIDC_PROVIDER_NAME` | `Single Sign-On (OIDC)` | Display label for the login button |
-| `LOCAL_AUTH_ENABLED` | `true` | Allows local email-based login |
+| `LOCAL_AUTH_ENABLED` | `true` | Allows local email & password login |
+| `ALLOW_REGISTRATION` | `true` | Allows new users to create accounts self-service |
+| `INITIAL_ADMIN_PASSWORD` | `admin123` | Default password for the initial admin account (`admin@ivy.local`) |
+| `ADMIN_EMAIL` | `admin@ivy.local` | Email address designated as the administrator |
 | `DEV_LOGIN_ENABLED` | `false` | Enables 1-click test user switcher in development mode |
 
 ### Example: Authentik / Keycloak / Google Setup

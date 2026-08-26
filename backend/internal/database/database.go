@@ -15,6 +15,7 @@ import (
 
 	"github.com/yahya-ns/ivy-wallet/backend/internal/config"
 	"github.com/yahya-ns/ivy-wallet/backend/internal/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const DefaultUserID = "default-user"
@@ -151,6 +152,7 @@ func (db *DB) migrateSQLite() error {
 		provider TEXT NOT NULL DEFAULT 'local',
 		subject TEXT,
 		role TEXT NOT NULL DEFAULT 'user',
+		password_hash TEXT,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -330,6 +332,7 @@ func (db *DB) migrateSQLite() error {
 
 	// Safe alter columns for existing databases
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN password_hash TEXT")
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default-user'")
@@ -355,6 +358,7 @@ func (db *DB) migratePostgres() error {
 		provider VARCHAR(32) NOT NULL DEFAULT 'local',
 		subject VARCHAR(255),
 		role VARCHAR(32) NOT NULL DEFAULT 'user',
+		password_hash VARCHAR(255),
 		created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -519,6 +523,7 @@ func (db *DB) migratePostgres() error {
 	}
 
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)")
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN IF NOT EXISTS user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
@@ -544,6 +549,7 @@ func (db *DB) migrateMariaDB() error {
 		provider VARCHAR(32) NOT NULL DEFAULT 'local',
 		subject VARCHAR(255),
 		role VARCHAR(32) NOT NULL DEFAULT 'user',
+		password_hash VARCHAR(255),
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -716,6 +722,7 @@ func (db *DB) migrateMariaDB() error {
 	}
 
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)")
 	_, _ = db.DB.Exec("ALTER TABLE settings ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE accounts ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
 	_, _ = db.DB.Exec("ALTER TABLE categories ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default-user'")
@@ -732,14 +739,20 @@ func (db *DB) migrateMariaDB() error {
 }
 
 func (db *DB) migrateMultiUserData() error {
-	// 1. Ensure default user exists
+	// 1. Ensure default user exists with bcrypt password hash
+	defaultHash, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", DefaultUserID).Scan(&count)
 	if err == nil && count == 0 {
 		_, _ = db.Exec(`
-			INSERT INTO users (id, email, name, provider, role, created_at, updated_at)
-			VALUES (?, 'admin@ivy.local', 'Default Admin', 'local', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-		`, DefaultUserID)
+			INSERT INTO users (id, email, name, provider, role, password_hash, created_at, updated_at)
+			VALUES (?, 'admin@ivy.local', 'Default Admin', 'local', 'admin', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		`, DefaultUserID, string(defaultHash))
+	} else {
+		// Update password_hash for default user if empty
+		_, _ = db.Exec(`
+			UPDATE users SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')
+		`, string(defaultHash), DefaultUserID)
 	}
 
 	// 2. Backfill existing records with DefaultUserID
@@ -1016,6 +1029,76 @@ func (db *DB) UpsertLocalOrDevUser(email, name, provider string) (*models.User, 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}, nil
+}
+
+// CreateLocalUser creates a new user registered with email and password
+func (db *DB) CreateLocalUser(email, name, passwordHash, role string) (*models.User, error) {
+	newID := uuid.NewString()
+	now := time.Now().UTC()
+	if role == "" {
+		role = "user"
+	}
+
+	_, err := db.Exec(`
+		INSERT INTO users (id, email, name, provider, role, password_hash, created_at, updated_at)
+		VALUES (?, ?, ?, 'local', ?, ?, ?, ?)
+	`, newID, email, name, role, passwordHash, now, now)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = db.SeedUserData(newID, name)
+
+	return &models.User{
+		ID:        newID,
+		Email:     email,
+		Name:      name,
+		Provider:  "local",
+		Role:      role,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+// GetUserByEmailWithPassword retrieves user details along with their password hash
+func (db *DB) GetUserByEmailWithPassword(email string) (*models.User, string, error) {
+	var u models.User
+	var avatar, sub, passHash sql.NullString
+	err := db.QueryRow(`
+		SELECT id, email, name, avatar_url, provider, subject, role, password_hash, created_at, updated_at
+		FROM users
+		WHERE LOWER(email) = LOWER(?)
+	`, email).Scan(&u.ID, &u.Email, &u.Name, &avatar, &u.Provider, &sub, &u.Role, &passHash, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, "", err
+	}
+	if avatar.Valid {
+		u.AvatarURL = avatar.String
+	}
+	if sub.Valid {
+		u.Subject = sub.String
+	}
+	passwordHash := ""
+	if passHash.Valid {
+		passwordHash = passHash.String
+	}
+	return &u, passwordHash, nil
+}
+
+// UpdateUserPassword updates the password hash for a user
+func (db *DB) UpdateUserPassword(userID, newPasswordHash string) error {
+	now := time.Now().UTC()
+	_, err := db.Exec(`
+		UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
+	`, newPasswordHash, now, userID)
+	return err
+}
+
+// CountUsers returns the total count of registered users
+func (db *DB) CountUsers() (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	return count, err
 }
 
 // Sync Upsert Helpers supporting SQLite, PostgreSQL, and MariaDB (Multi-User scoped)

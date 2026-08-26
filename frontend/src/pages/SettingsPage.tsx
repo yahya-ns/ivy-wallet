@@ -24,6 +24,8 @@ import {
   User as UserIcon,
   LogOut,
   KeyRound,
+  Lock,
+  AlertCircle,
 } from "lucide-react";
 
 export const SettingsPage: React.FC = () => {
@@ -44,7 +46,7 @@ export const SettingsPage: React.FC = () => {
     formatRelative,
   } = useTheme();
 
-  const { user, authConfig, logout } = useAuth();
+  const { user, authConfig, logout, changePassword } = useAuth();
 
   const {
     isOnline,
@@ -60,6 +62,15 @@ export const SettingsPage: React.FC = () => {
   const [walletName, setWalletName] = useState("My Ivy Wallet");
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Change Password state
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+  const [isChangingPw, setIsChangingPw] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -81,6 +92,35 @@ export const SettingsPage: React.FC = () => {
       alert("Settings saved successfully!");
     } catch {
       alert("Failed to update settings");
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(null);
+
+    if (!newPassword || newPassword.length < 6) {
+      setPwError("New password must be at least 6 characters long");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("New passwords do not match");
+      return;
+    }
+
+    setIsChangingPw(true);
+    try {
+      await changePassword(oldPassword, newPassword);
+      setPwSuccess("Password updated successfully!");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setShowPasswordForm(false), 2000);
+    } catch (err: any) {
+      setPwError(err.message || "Failed to update password");
+    } finally {
+      setIsChangingPw(false);
     }
   };
 
@@ -175,7 +215,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-center gap-2 mt-2">
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-ivy-purple/10 text-ivy-purple border border-ivy-purple/20">
                     <ShieldCheck size={12} />
-                    {user.provider ? user.provider.toUpperCase() : "OIDC"}
+                    {user.provider ? user.provider.toUpperCase() : "LOCAL"}
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)]">
                     Role: {user.role || "user"}
@@ -184,16 +224,101 @@ export const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <IvyButton
-              onClick={logout}
-              variant="danger"
-              size="sm"
-              className="self-start sm:self-center"
-            >
-              <LogOut size={15} />
-              <span>Sign Out</span>
-            </IvyButton>
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              {user.provider === "local" && (
+                <IvyButton
+                  onClick={() => setShowPasswordForm(!showPasswordForm)}
+                  variant="secondary"
+                  size="sm"
+                >
+                  <KeyRound size={14} />
+                  <span>{showPasswordForm ? "Cancel" : "Change Password"}</span>
+                </IvyButton>
+              )}
+
+              <IvyButton
+                onClick={logout}
+                variant="danger"
+                size="sm"
+              >
+                <LogOut size={14} />
+                <span>Sign Out</span>
+              </IvyButton>
+            </div>
           </div>
+
+          {/* Change Password Collapsible Form */}
+          {showPasswordForm && (
+            <form onSubmit={handleChangePasswordSubmit} className="pt-4 mt-2 border-t border-[var(--border-subtle)] space-y-3 animate-in fade-in">
+              <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                Update Account Password
+              </h4>
+
+              {pwError && (
+                <div className="p-2.5 rounded-xl bg-ivy-red/10 border border-ivy-red/30 text-xs text-ivy-red font-medium flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{pwError}</span>
+                </div>
+              )}
+              {pwSuccess && (
+                <div className="p-2.5 rounded-xl bg-ivy-green/10 border border-ivy-green/30 text-xs text-ivy-green font-medium flex items-center gap-2">
+                  <CheckCircle2 size={14} className="shrink-0" />
+                  <span>{pwSuccess}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--text-secondary)] mb-1">
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--text-secondary)] mb-1">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min. 6 characters"
+                    required
+                    className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--text-secondary)] mb-1">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat new password"
+                    required
+                    className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <IvyButton type="submit" size="sm" variant="primary" disabled={isChangingPw}>
+                  <Lock size={14} />
+                  <span>{isChangingPw ? "Saving..." : "Update Password"}</span>
+                </IvyButton>
+              </div>
+            </form>
+          )}
         </IvyCard>
       )}
 

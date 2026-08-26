@@ -19,6 +19,7 @@ export interface AuthConfig {
   oidcEnabled: boolean;
   oidcProviderName: string;
   localAuthEnabled: boolean;
+  allowRegistration: boolean;
   devLoginEnabled: boolean;
 }
 

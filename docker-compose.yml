@@ -19,6 +19,9 @@ services:
       - AUTH_ENABLED=true
       - JWT_SECRET=change-this-to-a-secure-random-string-in-production
       - LOCAL_AUTH_ENABLED=true
+      - ALLOW_REGISTRATION=true
+      - INITIAL_ADMIN_PASSWORD=admin123
+      - ADMIN_EMAIL=admin@ivy.local
       - DEV_LOGIN_ENABLED=false
 
       # --- OIDC / SSO Configuration (Keycloak, Authentik, Authelia, Google, etc.) ---

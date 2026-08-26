@@ -80,6 +80,8 @@ func main() {
 			authRoute.Get("/config", authHandler.GetConfig)
 			authRoute.Get("/oidc/login", authHandler.OIDCLogin)
 			authRoute.Get("/oidc/callback", authHandler.OIDCCallback)
+			authRoute.Post("/register", authHandler.Register)
+			authRoute.Post("/login", authHandler.Login)
 			authRoute.Post("/login/local", authHandler.LocalLogin)
 			authRoute.Post("/dev-login", authHandler.DevLogin)
 			authRoute.Get("/me", authHandler.Me)
@@ -90,8 +92,9 @@ func main() {
 		api.Group(func(protected chi.Router) {
 			protected.Use(middleware.AuthMiddleware(tokenMgr, cfg.Auth.Enabled, db))
 
-			// Auth User Update
+			// Auth User Profile & Password
 			protected.Patch("/auth/me", authHandler.UpdateMe)
+			protected.Post("/auth/change-password", authHandler.ChangePassword)
 
 			// Accounts
 			protected.Get("/accounts", accountHandler.GetAll)

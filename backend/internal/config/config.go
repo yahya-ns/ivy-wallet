@@ -16,18 +16,21 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled          bool
-	JWTSecret        string
-	SessionCookie    string
-	OIDCEnabled      bool
-	OIDCIssuerURL    string
-	OIDCClientID     string
-	OIDCClientSecret string
-	OIDCRedirectURL  string
-	OIDCScopes       []string
-	OIDCProviderName string
-	LocalAuthEnabled bool
-	DevLoginEnabled  bool
+	Enabled              bool
+	JWTSecret            string
+	SessionCookie        string
+	OIDCEnabled          bool
+	OIDCIssuerURL        string
+	OIDCClientID         string
+	OIDCClientSecret     string
+	OIDCRedirectURL      string
+	OIDCScopes           []string
+	OIDCProviderName     string
+	LocalAuthEnabled     bool
+	AllowRegistration    bool
+	InitialAdminPassword string
+	AdminEmail           string
+	DevLoginEnabled      bool
 }
 
 type Config struct {
@@ -138,21 +141,27 @@ func Load() *Config {
 	// OIDC is enabled if explicitly true or if OIDC_ISSUER_URL is configured
 	oidcEnabled := getEnvBool("OIDC_ENABLED", oidcIssuer != "")
 	localAuthEnabled := getEnvBool("LOCAL_AUTH_ENABLED", true)
+	allowRegistration := getEnvBool("ALLOW_REGISTRATION", true)
+	initialAdminPassword := getEnvOrDefault("INITIAL_ADMIN_PASSWORD", "admin123")
+	adminEmail := strings.ToLower(strings.TrimSpace(getEnvOrDefault("ADMIN_EMAIL", "admin@ivy.local")))
 	devLoginEnabled := getEnvBool("DEV_LOGIN_ENABLED", true)
 
 	authConfig := AuthConfig{
-		Enabled:          authEnabled,
-		JWTSecret:        jwtSecret,
-		SessionCookie:    getEnvOrDefault("SESSION_COOKIE_NAME", "ivy_session"),
-		OIDCEnabled:      oidcEnabled,
-		OIDCIssuerURL:    oidcIssuer,
-		OIDCClientID:     oidcClientID,
-		OIDCClientSecret: oidcClientSecret,
-		OIDCRedirectURL:  oidcRedirectURL,
-		OIDCScopes:       oidcScopes,
-		OIDCProviderName: oidcProviderName,
-		LocalAuthEnabled: localAuthEnabled,
-		DevLoginEnabled:  devLoginEnabled,
+		Enabled:              authEnabled,
+		JWTSecret:            jwtSecret,
+		SessionCookie:        getEnvOrDefault("SESSION_COOKIE_NAME", "ivy_session"),
+		OIDCEnabled:          oidcEnabled,
+		OIDCIssuerURL:        oidcIssuer,
+		OIDCClientID:         oidcClientID,
+		OIDCClientSecret:     oidcClientSecret,
+		OIDCRedirectURL:      oidcRedirectURL,
+		OIDCScopes:           oidcScopes,
+		OIDCProviderName:     oidcProviderName,
+		LocalAuthEnabled:     localAuthEnabled,
+		AllowRegistration:    allowRegistration,
+		InitialAdminPassword: initialAdminPassword,
+		AdminEmail:           adminEmail,
+		DevLoginEnabled:      devLoginEnabled,
 	}
 
 	return &Config{
