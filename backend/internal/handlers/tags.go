@@ -51,6 +51,34 @@ func (h *TagHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tags)
 }
 
+func (h *TagHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var t models.Tag
+	var isDel int
+	var txCount int
+
+	err := h.DB.QueryRow(`
+		SELECT t.id, t.name, t.color, t.order_num, t.is_deleted, t.created_at, t.updated_at,
+		       COUNT(DISTINCT tx.id) as tx_count
+		FROM tags t
+		LEFT JOIN transaction_tags tt ON t.id = tt.tag_id
+		LEFT JOIN transactions tx ON tt.transaction_id = tx.id AND tx.is_deleted = 0
+		WHERE t.id = ? AND t.is_deleted = 0
+		GROUP BY t.id, t.name, t.color, t.order_num, t.is_deleted, t.created_at, t.updated_at
+	`, id).Scan(&t.ID, &t.Name, &t.Color, &t.OrderNum, &isDel, &t.CreatedAt, &t.UpdatedAt, &txCount)
+
+	if err != nil {
+		http.Error(w, "Tag not found", http.StatusNotFound)
+		return
+	}
+
+	t.IsDeleted = isDel == 1
+	t.TransactionCount = txCount
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(t)
+}
+
 func (h *TagHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name  string `json:"name"`

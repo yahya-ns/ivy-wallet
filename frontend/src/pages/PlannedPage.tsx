@@ -5,6 +5,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyModal } from "@/components/ui/IvyModal";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { AccountSelect } from "@/components/ui/AccountSelect";
 import { CategorySelect } from "@/components/ui/CategorySelect";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
@@ -17,6 +18,7 @@ export const PlannedPage: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteRule, setConfirmDeleteRule] = useState<{ id: string; title: string } | null>(null);
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,7 +83,6 @@ export const PlannedPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this planned payment rule?")) return;
     try {
       await fetch(`/api/planned/${id}`, { method: "DELETE" });
       fetchRules();
@@ -218,8 +219,8 @@ export const PlannedPage: React.FC = () => {
                       <Power size={16} />
                     </button>
                     <button
-                      onClick={() => handleDelete(rule.id)}
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                      onClick={() => setConfirmDeleteRule({ id: rule.id, title: rule.title || "Planned Payment" })}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Delete Rule"
                     >
                       <Trash2 size={16} />
@@ -393,6 +394,18 @@ export const PlannedPage: React.FC = () => {
           </div>
         </form>
       </IvyModal>
+
+      {/* Themed Confirm Modal: Delete Planned Rule */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteRule}
+        onClose={() => setConfirmDeleteRule(null)}
+        onConfirm={() => {
+          if (confirmDeleteRule) return handleDelete(confirmDeleteRule.id);
+        }}
+        title="Delete Planned Rule?"
+        message={`Are you sure you want to delete the planned payment rule "${confirmDeleteRule?.title}"? Future automatic executions will be cancelled.`}
+        confirmText="Delete Rule"
+      />
     </div>
   );
 };

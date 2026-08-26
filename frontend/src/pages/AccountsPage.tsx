@@ -6,6 +6,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyIcon } from "@/components/ui/IvyIcon";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import { Plus, Edit2, Trash2, Wallet, CheckCircle2 } from "lucide-react";
 
@@ -16,6 +17,7 @@ export const AccountsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [confirmDeleteAcc, setConfirmDeleteAcc] = useState<{ id: string; name: string } | null>(null);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -44,8 +46,6 @@ export const AccountsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this account? Existing transactions will remain."))
-      return;
     try {
       await fetch(`/api/accounts/${id}`, { method: "DELETE" });
       fetchAccounts();
@@ -135,7 +135,7 @@ export const AccountsPage: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(acc.id);
+                        setConfirmDeleteAcc({ id: acc.id, name: acc.name });
                       }}
                       className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Delete Account"
@@ -203,6 +203,18 @@ export const AccountsPage: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchAccounts}
         initialAccount={selectedAccount}
+      />
+
+      {/* Themed Confirm Modal: Delete Account */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteAcc}
+        onClose={() => setConfirmDeleteAcc(null)}
+        onConfirm={() => {
+          if (confirmDeleteAcc) return handleDelete(confirmDeleteAcc.id);
+        }}
+        title="Delete Account?"
+        message={`Are you sure you want to delete "${confirmDeleteAcc?.name}"? Transactions associated with this account will remain.`}
+        confirmText="Delete Account"
       />
     </div>
   );

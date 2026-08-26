@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
 import { Header } from "./Header";
+import { MobileNavDrawer } from "./MobileNavDrawer";
 import { TransactionModal } from "@/components/transaction/TransactionModal";
 import { Account, Category } from "@/lib/types";
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -39,15 +41,28 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        <Header onQuickAdd={() => setIsQuickAddOpen(true)} />
+        <Header
+          onQuickAdd={() => setIsQuickAddOpen(true)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12">
           {children}
         </main>
 
         {/* Mobile Bottom Bar */}
-        <BottomNav onQuickAdd={() => setIsQuickAddOpen(true)} />
+        <BottomNav
+          onQuickAdd={() => setIsQuickAddOpen(true)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        />
       </div>
+
+      {/* Mobile Slide-out Drawer */}
+      <MobileNavDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        onQuickAdd={() => setIsQuickAddOpen(true)}
+      />
 
       {/* Global Quick Add Transaction Modal */}
       <TransactionModal

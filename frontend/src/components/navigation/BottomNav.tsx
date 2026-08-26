@@ -3,25 +3,27 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   ArrowLeftRight,
+  Wallet,
+  Tags,
   Plus,
-  BarChart3,
-  Settings,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
   onQuickAdd: () => void;
+  onOpenMobileMenu?: () => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd, onOpenMobileMenu }) => {
   const [location] = useLocation();
 
   const navItems = [
     { href: "/", label: "Home", icon: LayoutDashboard },
-    { href: "/transactions", label: "Activity", icon: ArrowLeftRight },
+    { href: "/accounts", label: "Accounts", icon: Wallet },
     { isAction: true, label: "Add", icon: Plus, onClick: onQuickAdd },
-    { href: "/reports", label: "Reports", icon: BarChart3 },
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/categories", label: "Categories", icon: Tags },
+    { isMenu: true, label: "Menu", icon: Menu, onClick: onOpenMobileMenu },
   ];
 
   return (
@@ -33,10 +35,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onQuickAdd }) => {
               <button
                 key={index}
                 onClick={item.onClick}
-                className="w-12 h-12 rounded-full bg-ivy-purple text-white flex items-center justify-center -translate-y-3 shadow-lg shadow-ivy-purple/40 active:scale-95 transition-transform"
+                className="w-12 h-12 rounded-full bg-ivy-purple text-white flex items-center justify-center -translate-y-3 shadow-lg shadow-ivy-purple/40 active:scale-95 transition-transform cursor-pointer"
                 title="Quick Add Transaction"
               >
                 <Plus size={24} className="stroke-[2.5]" />
+              </button>
+            );
+          }
+
+          if (item.isMenu) {
+            const Icon = item.icon;
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={item.onClick}
+                className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] active:text-ivy-purple transition-colors cursor-pointer"
+                title="All Navigation Menu"
+              >
+                <Icon size={20} className="stroke-[2.2]" />
+                <span className="mt-1">{item.label}</span>
               </button>
             );
           }

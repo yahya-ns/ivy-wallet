@@ -7,6 +7,8 @@ import { TransactionsPage } from "@/pages/TransactionsPage";
 import { AccountsPage } from "@/pages/AccountsPage";
 import { AccountDetailPage } from "@/pages/AccountDetailPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
+import { CategoryDetailPage } from "@/pages/CategoryDetailPage";
+import { TagDetailPage } from "@/pages/TagDetailPage";
 import { BudgetsPage } from "@/pages/BudgetsPage";
 import { LoansPage } from "@/pages/LoansPage";
 import { PlannedPage } from "@/pages/PlannedPage";
@@ -23,6 +25,8 @@ export default function App() {
           <Route path="/accounts" component={AccountsPage} />
           <Route path="/accounts/:id" component={AccountDetailPage} />
           <Route path="/categories" component={CategoriesPage} />
+          <Route path="/categories/:id" component={CategoryDetailPage} />
+          <Route path="/tags/:id" component={TagDetailPage} />
           <Route path="/budgets" component={BudgetsPage} />
           <Route path="/loans" component={LoansPage} />
           <Route path="/planned" component={PlannedPage} />

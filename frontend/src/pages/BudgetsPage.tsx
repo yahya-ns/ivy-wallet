@@ -5,6 +5,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyModal } from "@/components/ui/IvyModal";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { Plus, Edit2, Trash2, Target, AlertTriangle } from "lucide-react";
 
 export const BudgetsPage: React.FC = () => {
@@ -16,6 +17,7 @@ export const BudgetsPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
+  const [confirmDeleteBudget, setConfirmDeleteBudget] = useState<{ id: string; name: string } | null>(null);
 
   // Form states
   const [name, setName] = useState("");
@@ -75,11 +77,11 @@ export const BudgetsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this budget?")) return;
     try {
       await fetch(`/api/budgets/${id}`, { method: "DELETE" });
       fetchBudgets();
       window.dispatchEvent(new CustomEvent("ivy-data-updated"));
+      setConfirmDeleteBudget(null);
     } catch (e) {
       console.error("Delete budget failed:", e);
     }
@@ -210,8 +212,8 @@ export const BudgetsPage: React.FC = () => {
                       <Edit2 size={15} />
                     </button>
                     <button
-                      onClick={() => handleDelete(b.id)}
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                      onClick={() => setConfirmDeleteBudget({ id: b.id, name: b.name })}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Delete Budget"
                     >
                       <Trash2 size={15} />
@@ -365,6 +367,18 @@ export const BudgetsPage: React.FC = () => {
           </div>
         </form>
       </IvyModal>
+
+      {/* Themed Confirm Modal: Delete Budget */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteBudget}
+        onClose={() => setConfirmDeleteBudget(null)}
+        onConfirm={() => {
+          if (confirmDeleteBudget) return handleDelete(confirmDeleteBudget.id);
+        }}
+        title="Delete Budget?"
+        message={`Are you sure you want to delete the budget "${confirmDeleteBudget?.name}"?`}
+        confirmText="Delete Budget"
+      />
     </div>
   );
 };

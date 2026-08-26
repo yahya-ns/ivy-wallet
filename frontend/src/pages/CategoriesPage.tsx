@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { Category, Tag } from "@/lib/types";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyIcon } from "@/components/ui/IvyIcon";
 import { IvyModal } from "@/components/ui/IvyModal";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { COLOR_OPTIONS, ICON_OPTIONS } from "@/lib/constants";
 import { Plus, Edit2, Trash2, Tags as TagsIcon, FolderTree, ChevronRight } from "lucide-react";
 
 export const CategoriesPage: React.FC = () => {
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<"categories" | "tags">("categories");
 
   // Category states
@@ -35,6 +38,10 @@ export const CategoriesPage: React.FC = () => {
   const [tagColor, setTagColor] = useState("#5C3DF5");
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState<string | null>(null);
+
+  // Confirm delete modals
+  const [confirmCat, setConfirmCat] = useState<{ id: string; name: string; isSub?: boolean } | null>(null);
+  const [confirmTag, setConfirmTag] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch Categories
   const fetchCategories = useCallback(async () => {
@@ -70,12 +77,18 @@ export const CategoriesPage: React.FC = () => {
   // Root categories
   const rootCategories = categories.filter((c) => !c.parentId);
 
+  // Parent Category object if a parentId is chosen
+  const parentCategoryObj = catParentId
+    ? categories.find((c) => c.id === catParentId)
+    : null;
+
   // --- Category Handlers ---
   const handleOpenCreateCategory = (parentId?: string) => {
     setSelectedCat(null);
     setCatName("");
-    setCatColor("#12B880");
-    setCatIcon("tag");
+    const parent = parentId ? categories.find((c) => c.id === parentId) : null;
+    setCatColor(parent?.color || "#12B880");
+    setCatIcon(parent?.icon || "tag");
     setCatParentId(parentId || "");
     setCatError(null);
     setIsCatModalOpen(true);
@@ -84,17 +97,18 @@ export const CategoriesPage: React.FC = () => {
   const handleOpenEditCategory = (cat: Category) => {
     setSelectedCat(cat);
     setCatName(cat.name);
-    setCatColor(cat.color || "#12B880");
-    setCatIcon(cat.icon || "tag");
+    const parent = cat.parentId ? categories.find((c) => c.id === cat.parentId) : null;
+    setCatColor(parent?.color || cat.color || "#12B880");
+    setCatIcon(parent?.icon || cat.icon || "tag");
     setCatParentId(cat.parentId || "");
     setCatError(null);
     setIsCatModalOpen(true);
   };
 
-  const handleDeleteCategory = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this category (and its subcategories)?")) return;
+  const executeDeleteCategory = async () => {
+    if (!confirmCat) return;
     try {
-      await fetch(`/api/categories/${id}`, { method: "DELETE" });
+      await fetch(`/api/categories/${confirmCat.id}`, { method: "DELETE" });
       fetchCategories();
       window.dispatchEvent(new CustomEvent("ivy-data-updated"));
     } catch (e) {
@@ -116,13 +130,16 @@ export const CategoriesPage: React.FC = () => {
       const url = selectedCat ? `/api/categories/${selectedCat.id}` : `/api/categories`;
       const method = selectedCat ? "PUT" : "POST";
 
+      const effectiveColor = parentCategoryObj ? parentCategoryObj.color : catColor;
+      const effectiveIcon = parentCategoryObj ? parentCategoryObj.icon : catIcon;
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: catName.trim(),
-          color: catColor,
-          icon: catIcon,
+          color: effectiveColor,
+          icon: effectiveIcon,
           parentId: catParentId ? catParentId : null,
         }),
       });
@@ -159,10 +176,10 @@ export const CategoriesPage: React.FC = () => {
     setIsTagModalOpen(true);
   };
 
-  const handleDeleteTag = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this tag?")) return;
+  const executeDeleteTag = async () => {
+    if (!confirmTag) return;
     try {
-      await fetch(`/api/tags/${id}`, { method: "DELETE" });
+      await fetch(`/api/tags/${confirmTag.id}`, { method: "DELETE" });
       fetchTags();
       window.dispatchEvent(new CustomEvent("ivy-data-updated"));
     } catch (e) {
@@ -218,7 +235,7 @@ export const CategoriesPage: React.FC = () => {
             Categories & Tags
           </h1>
           <p className="text-xs sm:text-sm text-[var(--text-muted)] mt-1">
-            Organize transactions with hierarchical sub-categories and custom tags.
+            Organize transactions with hierarchical sub-categories and custom tags. Click any to view detailed activity.
           </p>
         </div>
 
@@ -289,7 +306,8 @@ export const CategoriesPage: React.FC = () => {
                 return (
                   <IvyCard
                     key={cat.id}
-                    className="p-5 flex flex-col justify-between hover:border-ivy-purple/40 transition-all group"
+                    onClick={() => setLocation(`/categories/${cat.id}`)}
+                    className="p-5 flex flex-col justify-between hover:border-ivy-purple/50 hover:shadow-md transition-all group cursor-pointer"
                   >
                     {/* Top Row: Icon, Title & Actions */}
                     <div>
@@ -303,8 +321,9 @@ export const CategoriesPage: React.FC = () => {
                           </div>
 
                           <div className="min-w-0">
-                            <h3 className="font-extrabold text-base text-[var(--text-primary)] truncate">
-                              {cat.name}
+                            <h3 className="font-extrabold text-base text-[var(--text-primary)] truncate flex items-center gap-1.5">
+                              <span>{cat.name}</span>
+                              <ChevronRight size={14} className="text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
                             </h3>
                             <span className="text-[11px] font-semibold text-[var(--text-muted)]">
                               {subcategories.length}{" "}
@@ -316,14 +335,22 @@ export const CategoriesPage: React.FC = () => {
                         {/* Edit / Delete / Add Subcategory buttons */}
                         <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => handleOpenEditCategory(cat)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditCategory(cat);
+                            }}
                             className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                             title="Edit Category"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
-                            onClick={() => handleDeleteCategory(cat.id)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmCat({ id: cat.id, name: cat.name, isSub: false });
+                            }}
                             className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                             title="Delete Category"
                           >
@@ -338,7 +365,10 @@ export const CategoriesPage: React.FC = () => {
                           <span>Sub-Categories</span>
                           <button
                             type="button"
-                            onClick={() => handleOpenCreateCategory(cat.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCreateCategory(cat.id);
+                            }}
                             className="text-ivy-purple hover:underline flex items-center gap-0.5 cursor-pointer font-bold lowercase first-letter:uppercase"
                           >
                             <Plus size={13} className="stroke-[3]" />
@@ -348,14 +378,18 @@ export const CategoriesPage: React.FC = () => {
 
                         {subcategories.length === 0 ? (
                           <p className="text-xs text-[var(--text-muted)] italic py-1">
-                            No sub-categories yet.
+                            No sub-categories yet. Click to view transactions or add sub.
                           </p>
                         ) : (
                           <div className="flex flex-wrap gap-1.5 pt-1">
                             {subcategories.map((sub) => (
                               <div
                                 key={sub.id}
-                                className="group/sub inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-ivy-purple/30 transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLocation(`/categories/${cat.id}`);
+                                }}
+                                className="group/sub inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-ivy-purple/30 transition-all cursor-pointer"
                               >
                                 <span
                                   className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -365,7 +399,10 @@ export const CategoriesPage: React.FC = () => {
                                 <div className="hidden group-hover/sub:flex items-center gap-0.5 ml-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleOpenEditCategory(sub)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditCategory(sub);
+                                    }}
                                     className="p-0.5 text-[var(--text-muted)] hover:text-ivy-purple cursor-pointer"
                                     title="Edit sub-category"
                                   >
@@ -373,7 +410,10 @@ export const CategoriesPage: React.FC = () => {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteCategory(sub.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setConfirmCat({ id: sub.id, name: sub.name, isSub: true });
+                                    }}
                                     className="p-0.5 text-[var(--text-muted)] hover:text-ivy-red cursor-pointer"
                                     title="Delete sub-category"
                                   >
@@ -392,6 +432,7 @@ export const CategoriesPage: React.FC = () => {
 
               {/* Add Category Card */}
               <button
+                type="button"
                 onClick={() => handleOpenCreateCategory()}
                 className="p-6 rounded-[24px] border-2 border-dashed border-[var(--border-color)] hover:border-ivy-purple bg-[var(--bg-surface-elevated)]/40 hover:bg-ivy-purple/5 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer min-h-[160px] group"
               >
@@ -443,7 +484,8 @@ export const CategoriesPage: React.FC = () => {
               {tags.map((tg) => (
                 <IvyCard
                   key={tg.id}
-                  className="p-4 flex items-center justify-between group hover:border-ivy-purple/40 transition-all"
+                  onClick={() => setLocation(`/tags/${tg.id}`)}
+                  className="p-4 flex items-center justify-between group hover:border-ivy-purple/50 hover:shadow-md transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
@@ -454,8 +496,9 @@ export const CategoriesPage: React.FC = () => {
                     </div>
 
                     <div className="min-w-0">
-                      <p className="font-bold text-sm text-[var(--text-primary)] truncate">
-                        #{tg.name}
+                      <p className="font-bold text-sm text-[var(--text-primary)] truncate flex items-center gap-1">
+                        <span>#{tg.name}</span>
+                        <ChevronRight size={13} className="text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
                       </p>
                       <p className="text-[11px] font-semibold text-[var(--text-muted)]">
                         {tg.transactionCount || 0}{" "}
@@ -466,14 +509,22 @@ export const CategoriesPage: React.FC = () => {
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={() => handleOpenEditTag(tg)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEditTag(tg);
+                      }}
                       className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Edit Tag"
                     >
                       <Edit2 size={13} />
                     </button>
                     <button
-                      onClick={() => handleDeleteTag(tg.id)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmTag({ id: tg.id, name: tg.name });
+                      }}
                       className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       title="Delete Tag"
                     >
@@ -485,6 +536,7 @@ export const CategoriesPage: React.FC = () => {
 
               {/* Add Tag Card */}
               <button
+                type="button"
                 onClick={handleOpenCreateTag}
                 className="p-4 rounded-[24px] border-2 border-dashed border-[var(--border-color)] hover:border-ivy-purple bg-[var(--bg-surface-elevated)]/40 hover:bg-ivy-purple/5 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer min-h-[90px] group"
               >
@@ -522,29 +574,24 @@ export const CategoriesPage: React.FC = () => {
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Category Name
-            </label>
-            <input
-              type="text"
-              placeholder={catParentId ? "e.g. Coffee & Cafe, Fast Food" : "e.g. Food & Dining, Shopping"}
-              value={catName}
-              onChange={(e) => setCatName(e.target.value)}
-              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
-              required
-              autoFocus
-            />
-          </div>
-
           {/* Parent Category Selector */}
           <div>
             <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
-              Parent Category (Hierarchy)
+              Category Level & Hierarchy
             </label>
             <select
               value={catParentId}
-              onChange={(e) => setCatParentId(e.target.value)}
+              onChange={(e) => {
+                const newParentId = e.target.value;
+                setCatParentId(newParentId);
+                if (newParentId) {
+                  const p = categories.find((c) => c.id === newParentId);
+                  if (p) {
+                    setCatColor(p.color || "#12B880");
+                    setCatIcon(p.icon || "tag");
+                  }
+                }
+              }}
               className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
             >
               <option value="">None (Top-Level Main Category)</option>
@@ -558,56 +605,104 @@ export const CategoriesPage: React.FC = () => {
             </select>
           </div>
 
-          {/* Color selector */}
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
-              Color
-            </label>
-            <div className="flex flex-wrap gap-2.5">
-              {COLOR_OPTIONS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setCatColor(c.value)}
-                  className={`w-7 h-7 rounded-full transition-transform cursor-pointer shadow-sm ${
-                    catColor === c.value
-                      ? "scale-125 ring-2 ring-offset-2 ring-ivy-purple"
-                      : "hover:scale-110"
-                  }`}
-                  style={{ backgroundColor: c.value }}
-                  title={c.name}
-                />
-              ))}
+          {/* If Sub-category is selected: show inherited info banner */}
+          {parentCategoryObj ? (
+            <div className="p-3 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                style={{ backgroundColor: parentCategoryObj.color }}
+              >
+                <IvyIcon name={parentCategoryObj.icon || "tag"} size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-[var(--text-primary)]">
+                  Inherited from "{parentCategoryObj.name}"
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Icon and color are locked and inherited directly from the parent category.
+                </p>
+              </div>
             </div>
+          ) : null}
+
+          <div>
+            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1.5 uppercase tracking-wider">
+              {catParentId ? "Sub-Category Name" : "Category Name"}
+            </label>
+            <input
+              type="text"
+              placeholder={catParentId ? "e.g. Coffee & Cafe, Fast Food" : "e.g. Food & Dining, Shopping"}
+              value={catName}
+              onChange={(e) => setCatName(e.target.value)}
+              className="w-full bg-[var(--bg-surface-elevated)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-ivy-purple"
+              required
+              autoFocus
+            />
           </div>
 
-          {/* Icon selector (only for root category or optional) */}
-          <div>
-            <label className="block text-xs font-bold text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
-              Icon
-            </label>
-            <div className="grid grid-cols-6 gap-2 max-h-36 overflow-y-auto p-1">
-              {ICON_OPTIONS.map((iconName) => (
-                <button
-                  key={iconName}
-                  type="button"
-                  onClick={() => setCatIcon(iconName)}
-                  className={`p-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                    catIcon === iconName
-                      ? "border-ivy-purple bg-ivy-purple/10 text-ivy-purple"
-                      : "border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:border-[var(--border-color)]"
-                  }`}
-                >
-                  <IvyIcon name={iconName} size={18} />
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Color & Icon selectors only for Top-Level Main Categories */}
+          {!catParentId && (
+            <>
+              {/* Color selector */}
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
+                  Color
+                </label>
+                <div className="flex flex-wrap gap-2.5">
+                  {COLOR_OPTIONS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setCatColor(c.value)}
+                      className={`w-7 h-7 rounded-full transition-transform cursor-pointer shadow-sm ${
+                        catColor === c.value
+                          ? "scale-125 ring-2 ring-offset-2 ring-ivy-purple"
+                          : "hover:scale-110"
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Icon selector */}
+              <div>
+                <label className="block text-xs font-bold text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
+                  Icon
+                </label>
+                <div className="grid grid-cols-6 gap-2 max-h-36 overflow-y-auto p-1">
+                  {ICON_OPTIONS.map((iconName) => (
+                    <button
+                      key={iconName}
+                      type="button"
+                      onClick={() => setCatIcon(iconName)}
+                      className={`p-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                        catIcon === iconName
+                          ? "border-ivy-purple bg-ivy-purple/10 text-ivy-purple"
+                          : "border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:border-[var(--border-color)]"
+                      }`}
+                    >
+                      <IvyIcon name={iconName} size={18} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Submit */}
           <div className="pt-2">
             <IvyButton type="submit" disabled={catSaving} className="w-full py-3">
-              {catSaving ? "Saving..." : selectedCat ? "Update Category" : "Create Category"}
+              {catSaving
+                ? "Saving..."
+                : selectedCat
+                ? catParentId
+                  ? "Update Sub-Category"
+                  : "Update Category"
+                : catParentId
+                ? "Create Sub-Category"
+                : "Create Category"}
             </IvyButton>
           </div>
         </form>
@@ -680,6 +775,30 @@ export const CategoriesPage: React.FC = () => {
           </div>
         </form>
       </IvyModal>
+
+      {/* Themed Confirm Modal: Delete Category or Subcategory */}
+      <IvyConfirmModal
+        isOpen={!!confirmCat}
+        onClose={() => setConfirmCat(null)}
+        onConfirm={executeDeleteCategory}
+        title={confirmCat?.isSub ? "Delete Sub-Category?" : "Delete Category?"}
+        message={
+          confirmCat?.isSub
+            ? `Are you sure you want to delete "${confirmCat.name}"? Transactions will remain in the parent category.`
+            : `Are you sure you want to delete "${confirmCat?.name}" and all of its sub-categories? Existing transactions will remain.`
+        }
+        confirmText={confirmCat?.isSub ? "Delete Sub-Category" : "Delete Category"}
+      />
+
+      {/* Themed Confirm Modal: Delete Tag */}
+      <IvyConfirmModal
+        isOpen={!!confirmTag}
+        onClose={() => setConfirmTag(null)}
+        onConfirm={executeDeleteTag}
+        title="Delete Tag?"
+        message={`Are you sure you want to delete #${confirmTag?.name}? Transactions will remain without this tag.`}
+        confirmText="Delete Tag"
+      />
     </div>
   );
 };

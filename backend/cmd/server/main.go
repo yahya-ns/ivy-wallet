@@ -74,12 +74,14 @@ func main() {
 
 		// Categories
 		api.Get("/categories", categoryHandler.GetAll)
+		api.Get("/categories/{id}", categoryHandler.GetByID)
 		api.Post("/categories", categoryHandler.Create)
 		api.Put("/categories/{id}", categoryHandler.Update)
 		api.Delete("/categories/{id}", categoryHandler.Delete)
 
 		// Tags
 		api.Get("/tags", tagHandler.GetAll)
+		api.Get("/tags/{id}", tagHandler.GetByID)
 		api.Post("/tags", tagHandler.Create)
 		api.Put("/tags/{id}", tagHandler.Update)
 		api.Delete("/tags/{id}", tagHandler.Delete)

@@ -6,6 +6,7 @@ import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { TransactionItem } from "@/components/transaction/TransactionItem";
 import { TransactionModal } from "@/components/transaction/TransactionModal";
 import { AccountModal } from "@/components/account/AccountModal";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { Account, Category, Transaction, TransactionType } from "@/lib/types";
@@ -29,6 +30,7 @@ export const DashboardPage: React.FC = () => {
   const [initialTxType, setInitialTxType] = useState<TransactionType>("EXPENSE");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -79,7 +81,6 @@ export const DashboardPage: React.FC = () => {
   };
 
   const handleDeleteTx = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this transaction?")) return;
     try {
       await fetch(`/api/transactions/${id}`, { method: "DELETE" });
       fetchData();
@@ -154,7 +155,7 @@ export const DashboardPage: React.FC = () => {
                   key={tx.id}
                   transaction={tx}
                   onEdit={handleEditTx}
-                  onDelete={handleDeleteTx}
+                  onDelete={(id) => setConfirmDeleteTxId(id)}
                 />
               ))}
             </div>
@@ -178,6 +179,18 @@ export const DashboardPage: React.FC = () => {
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
         onSuccess={fetchData}
+      />
+
+      {/* Themed Confirm Modal: Delete Transaction */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteTxId}
+        onClose={() => setConfirmDeleteTxId(null)}
+        onConfirm={() => {
+          if (confirmDeleteTxId) return handleDeleteTx(confirmDeleteTxId);
+        }}
+        title="Delete Transaction?"
+        message="Are you sure you want to delete this transaction? Your account balances will be updated accordingly."
+        confirmText="Delete Transaction"
       />
     </div>
   );

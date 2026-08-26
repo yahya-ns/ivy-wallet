@@ -64,6 +64,57 @@ func (h *CategoryHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(allCategories)
 }
 
+func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var c models.Category
+	var parentID sql.NullString
+	var isDel int
+
+	err := h.DB.QueryRow(`
+		SELECT id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at
+		FROM categories
+		WHERE id = ? AND is_deleted = 0
+	`, id).Scan(&c.ID, &c.Name, &c.Color, &c.Icon, &c.OrderNum, &parentID, &isDel, &c.CreatedAt, &c.UpdatedAt)
+
+	if err != nil {
+		http.Error(w, "Category not found", http.StatusNotFound)
+		return
+	}
+
+	if parentID.Valid && parentID.String != "" {
+		c.ParentId = &parentID.String
+	}
+	c.IsDeleted = isDel == 1
+
+	// Fetch subcategories if this is a parent category
+	rows, err := h.DB.Query(`
+		SELECT id, name, color, icon, order_num, parent_id, is_deleted, created_at, updated_at
+		FROM categories
+		WHERE parent_id = ? AND is_deleted = 0
+		ORDER BY order_num ASC, created_at ASC
+	`, id)
+	if err == nil {
+		defer rows.Close()
+		subs := []models.Category{}
+		for rows.Next() {
+			var sc models.Category
+			var pID sql.NullString
+			var sDel int
+			if err := rows.Scan(&sc.ID, &sc.Name, &sc.Color, &sc.Icon, &sc.OrderNum, &pID, &sDel, &sc.CreatedAt, &sc.UpdatedAt); err == nil {
+				if pID.Valid {
+					sc.ParentId = &pID.String
+				}
+				sc.IsDeleted = sDel == 1
+				subs = append(subs, sc)
+			}
+		}
+		c.Subcategories = subs
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(c)
+}
+
 func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name     string  `json:"name"`
@@ -77,14 +128,25 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if input.ParentId != nil && *input.ParentId == "" {
+		input.ParentId = nil
+	}
+
+	// If creating a sub-category, inherit parent's color and icon
+	if input.ParentId != nil {
+		var pColor, pIcon string
+		err := h.DB.QueryRow("SELECT color, icon FROM categories WHERE id = ?", *input.ParentId).Scan(&pColor, &pIcon)
+		if err == nil {
+			input.Color = pColor
+			input.Icon = pIcon
+		}
+	}
+
 	if input.Color == "" {
 		input.Color = "#12B880"
 	}
 	if input.Icon == "" {
 		input.Icon = "tag"
-	}
-	if input.ParentId != nil && *input.ParentId == "" {
-		input.ParentId = nil
 	}
 
 	var count int
@@ -177,6 +239,16 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If updating a sub-category, inherit parent color and icon
+	if parentID != nil && *parentID != "" {
+		var pColor, pIcon string
+		err := h.DB.QueryRow("SELECT color, icon FROM categories WHERE id = ?", *parentID).Scan(&pColor, &pIcon)
+		if err == nil {
+			color = pColor
+			icon = pIcon
+		}
+	}
+
 	_, err = h.DB.Exec(`
 		UPDATE categories
 		SET name = ?, color = ?, icon = ?, order_num = ?, parent_id = ?, updated_at = ?
@@ -186,6 +258,15 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// If parent category updated its color/icon, cascade to subcategories
+	if parentID == nil {
+		_, _ = h.DB.Exec(`
+			UPDATE categories
+			SET color = ?, icon = ?, updated_at = ?
+			WHERE parent_id = ?
+		`, color, icon, now, id)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

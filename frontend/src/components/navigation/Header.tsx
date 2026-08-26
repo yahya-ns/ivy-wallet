@@ -1,14 +1,15 @@
 import React from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { ThemeSwitch } from "@/components/ui/ThemeSwitch";
-import { Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, Plus, RefreshCw, Menu } from "lucide-react";
 import { IvyButton } from "@/components/ui/IvyButton";
 
 interface HeaderProps {
   onQuickAdd: () => void;
+  onOpenMobileMenu?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onQuickAdd }) => {
+export const Header: React.FC<HeaderProps> = ({ onQuickAdd, onOpenMobileMenu }) => {
   const { hideBalance, toggleHideBalance } = useTheme();
 
   const handleSync = async () => {
@@ -22,14 +23,26 @@ export const Header: React.FC<HeaderProps> = ({ onQuickAdd }) => {
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3.5 bg-[var(--bg-main)]/80 backdrop-blur-md border-b border-[var(--border-subtle)]">
-      {/* Mobile brand title */}
-      <div className="flex items-center gap-2 md:hidden">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-ivy-purple to-ivy-green flex items-center justify-center text-white font-black text-xs shadow-md">
-          IV
+      {/* Mobile brand title with Hamburger button */}
+      <div className="flex items-center gap-2.5 md:hidden">
+        <button
+          type="button"
+          onClick={onOpenMobileMenu}
+          className="p-2 -ml-1.5 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+          title="Open Menu"
+          aria-label="Open Navigation Menu"
+        >
+          <Menu size={22} className="stroke-[2.5]" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-ivy-purple to-ivy-green flex items-center justify-center text-white font-black text-xs shadow-md">
+            IV
+          </div>
+          <span className="font-extrabold text-sm text-[var(--text-primary)]">
+            Ivy Wallet
+          </span>
         </div>
-        <span className="font-extrabold text-sm text-[var(--text-primary)]">
-          Ivy Wallet
-        </span>
       </div>
 
       <div className="hidden md:block">

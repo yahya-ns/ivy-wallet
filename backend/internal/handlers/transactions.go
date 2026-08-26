@@ -56,8 +56,8 @@ func (h *TransactionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if categoryID != "" && categoryID != "ALL" {
-		query += " AND t.category_id = ?"
-		args = append(args, categoryID)
+		query += " AND (t.category_id = ? OR t.subcategory_id = ? OR t.category_id IN (SELECT id FROM categories WHERE parent_id = ?))"
+		args = append(args, categoryID, categoryID, categoryID)
 	}
 
 	if subcategoryID != "" && subcategoryID != "ALL" {

@@ -5,6 +5,7 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyModal } from "@/components/ui/IvyModal";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
 import { Plus, CheckCircle2, HandCoins, ArrowDownLeft, ArrowUpRight, Trash2 } from "lucide-react";
 
 export const LoansPage: React.FC = () => {
@@ -13,6 +14,7 @@ export const LoansPage: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteLoan, setConfirmDeleteLoan] = useState<{ id: string; name: string } | null>(null);
 
   // Create Loan Modal
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -78,7 +80,6 @@ export const LoansPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this loan record?")) return;
     try {
       await fetch(`/api/loans/${id}`, { method: "DELETE" });
       fetchLoans();
@@ -286,8 +287,8 @@ export const LoansPage: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => handleDelete(loan.id)}
-                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    onClick={() => setConfirmDeleteLoan({ id: loan.id, name: loan.name })}
+                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                     title="Delete Loan"
                   >
                     <Trash2 size={15} />
@@ -522,6 +523,18 @@ export const LoansPage: React.FC = () => {
           </div>
         </form>
       </IvyModal>
+
+      {/* Themed Confirm Modal: Delete Loan */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteLoan}
+        onClose={() => setConfirmDeleteLoan(null)}
+        onConfirm={() => {
+          if (confirmDeleteLoan) return handleDelete(confirmDeleteLoan.id);
+        }}
+        title="Delete Loan Record?"
+        message={`Are you sure you want to delete the loan record for "${confirmDeleteLoan?.name}"?`}
+        confirmText="Delete Loan"
+      />
     </div>
   );
 };

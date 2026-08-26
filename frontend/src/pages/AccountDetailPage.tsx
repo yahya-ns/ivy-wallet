@@ -6,6 +6,8 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { IvyCard } from "@/components/ui/IvyCard";
 import { IvyButton } from "@/components/ui/IvyButton";
 import { IvyIcon } from "@/components/ui/IvyIcon";
+import { IvyConfirmModal } from "@/components/ui/IvyConfirmModal";
+import { TransactionItem } from "@/components/transaction/TransactionItem";
 import { TransactionModal } from "@/components/transaction/TransactionModal";
 import { AccountModal } from "@/components/account/AccountModal";
 import {
@@ -69,6 +71,8 @@ export const AccountDetailPage: React.FC = () => {
   const [initialTxType, setInitialTxType] = useState<TransactionType>("EXPENSE");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [confirmDeleteTxId, setConfirmDeleteTxId] = useState<string | null>(null);
+  const [confirmDeleteAccOpen, setConfirmDeleteAccOpen] = useState(false);
 
   // Fetch account data & transactions
   const fetchData = useCallback(async () => {
@@ -227,7 +231,6 @@ export const AccountDetailPage: React.FC = () => {
   };
 
   const handleDeleteTx = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this transaction?")) return;
     try {
       await fetch(`/api/transactions/${id}`, { method: "DELETE" });
       fetchData();
@@ -239,13 +242,6 @@ export const AccountDetailPage: React.FC = () => {
 
   const handleDeleteAccount = async () => {
     if (!account) return;
-    if (
-      !confirm(
-        `Are you sure you want to delete "${account.name}"? Transactions associated with this account will remain.`
-      )
-    )
-      return;
-
     try {
       await fetch(`/api/accounts/${account.id}`, { method: "DELETE" });
       window.dispatchEvent(new CustomEvent("ivy-data-updated"));
@@ -303,7 +299,7 @@ export const AccountDetailPage: React.FC = () => {
             <Edit2 size={16} />
           </button>
           <button
-            onClick={handleDeleteAccount}
+            onClick={() => setConfirmDeleteAccOpen(true)}
             className="p-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-ivy-red transition-all shadow-sm cursor-pointer"
             title="Delete Account"
           >
@@ -632,124 +628,14 @@ export const AccountDetailPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {txList.map((tx) => {
-                  const isExpense = tx.type === "EXPENSE";
-                  const isIncome = tx.type === "INCOME";
-                  const isTransfer = tx.type === "TRANSFER";
-                  const isIncomingTransfer = isTransfer && tx.toAccountId === accountId;
-                  const isOutgoingTransfer = isTransfer && tx.accountId === accountId;
-
-                  const getIcon = () => {
-                    if (isTransfer) return "arrow-left-right";
-                    return tx.category?.icon || (isIncome ? "wallet" : "shopping-bag");
-                  };
-
-                  const getBg = () => {
-                    if (isTransfer) return "#3193F5";
-                    return tx.category?.color || (isIncome ? "#12B880" : "#5C3DF5");
-                  };
-
-                  const getTitle = () => {
-                    if (tx.title) return tx.title;
-                    if (isTransfer) {
-                      if (isIncomingTransfer) {
-                        return `Transfer from ${tx.account?.name || "Account"}`;
-                      }
-                      return `Transfer to ${tx.toAccount?.name || "Account"}`;
-                    }
-                    return tx.category?.name || "Uncategorized";
-                  };
-
-                  return (
-                    <div
-                      key={tx.id}
-                      className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-color)] transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        {/* Icon */}
-                        <div
-                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                          style={{ backgroundColor: getBg() }}
-                        >
-                          {isTransfer ? (
-                            <ArrowLeftRight size={18} />
-                          ) : (
-                            <IvyIcon name={getIcon()} size={18} />
-                          )}
-                        </div>
-
-                        {/* Title & info */}
-                        <div className="min-w-0">
-                          <p className="font-bold text-sm text-[var(--text-primary)] truncate">
-                            {getTitle()}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mt-0.5">
-                            {isTransfer ? (
-                              <span className="font-medium text-ivy-blue">
-                                {isIncomingTransfer
-                                  ? `From: ${tx.account?.name}`
-                                  : `To: ${tx.toAccount?.name}`}
-                              </span>
-                            ) : (
-                              <span className="truncate">{tx.category?.name || "General"}</span>
-                            )}
-                            {tx.description && (
-                              <>
-                                <span>•</span>
-                                <span className="truncate max-w-[140px]">{tx.description}</span>
-                              </>
-                            )}
-                            <span>•</span>
-                            <span>{formatTime(tx.dateTime)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Amount & action controls */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span
-                          className={`text-sm sm:text-base font-extrabold ${
-                            isIncome || isIncomingTransfer
-                              ? "text-ivy-green"
-                              : isExpense || isOutgoingTransfer
-                              ? "text-ivy-red"
-                              : "text-ivy-blue"
-                          }`}
-                        >
-                          {hideBalance
-                            ? "••••••"
-                            : `${
-                                isIncome || isIncomingTransfer
-                                  ? "+"
-                                  : isExpense || isOutgoingTransfer
-                                  ? "-"
-                                  : ""
-                              }${formatMoney(
-                                isIncomingTransfer && tx.toAmount ? tx.toAmount : tx.amount,
-                                accountCurrency
-                              )}`}
-                        </span>
-
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleEditTx(tx)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-purple hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                            title="Edit Transaction"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTx(tx.id)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-ivy-red hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                            title="Delete Transaction"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {txList.map((tx) => (
+                  <TransactionItem
+                    key={tx.id}
+                    transaction={tx}
+                    onEdit={handleEditTx}
+                    onDelete={(id) => setConfirmDeleteTxId(id)}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -774,6 +660,28 @@ export const AccountDetailPage: React.FC = () => {
         onClose={() => setIsAccountModalOpen(false)}
         onSuccess={fetchData}
         initialAccount={account}
+      />
+
+      {/* Themed Confirm Modal: Delete Account */}
+      <IvyConfirmModal
+        isOpen={confirmDeleteAccOpen}
+        onClose={() => setConfirmDeleteAccOpen(false)}
+        onConfirm={handleDeleteAccount}
+        title="Delete Account?"
+        message={`Are you sure you want to delete "${account.name}"? Transactions associated with this account will remain.`}
+        confirmText="Delete Account"
+      />
+
+      {/* Themed Confirm Modal: Delete Transaction */}
+      <IvyConfirmModal
+        isOpen={!!confirmDeleteTxId}
+        onClose={() => setConfirmDeleteTxId(null)}
+        onConfirm={() => {
+          if (confirmDeleteTxId) return handleDeleteTx(confirmDeleteTxId);
+        }}
+        title="Delete Transaction?"
+        message="Are you sure you want to delete this transaction? Your account balance will be updated accordingly."
+        confirmText="Delete Transaction"
       />
     </div>
   );

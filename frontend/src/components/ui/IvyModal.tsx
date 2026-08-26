@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 interface IvyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   children: React.ReactNode;
   maxWidth?: "sm" | "md" | "lg" | "xl";
 }
@@ -53,17 +53,28 @@ export const IvyModal: React.FC<IvyModalProps> = ({
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[var(--border-subtle)]">
-          <h2 className="text-lg sm:text-xl font-black text-[var(--text-primary)] tracking-tight">
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        {title ? (
+          <div className="flex items-center justify-between pb-4 mb-4 border-b border-[var(--border-subtle)]">
+            <h2 className="text-lg sm:text-xl font-black text-[var(--text-primary)] tracking-tight">
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div>{children}</div>
